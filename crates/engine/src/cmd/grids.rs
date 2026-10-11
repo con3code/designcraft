@@ -623,21 +623,20 @@ mod tests {
         assert!((b.width() - 10.0).abs() < 1e-6 && (b.height() - 10.0).abs() < 1e-6, "{b:?}");
     }
 
-    /// New frame grids are set in Hiragino Mincho ProN W3 (a Mincho installed instead where it
-    /// isn't), and their text takes it.
+    /// New frame grids are set in the default grid font, Noto Serif CJK JP (a Mincho installed
+    /// instead where it isn't), and their text takes it.
     #[test]
     fn new_frame_grids_use_the_mincho_grid_font() {
+        use designcraft_doc::framegrid::{DEFAULT_GRID_FONT, GRID_FONT_FALLBACKS};
+        assert_eq!(DEFAULT_GRID_FONT, ("Noto Serif CJK JP", "Regular"));
+        assert_eq!(GRID_FONT_FALLBACKS.first(), Some(&DEFAULT_GRID_FONT));
         let mut s = session();
-        assert_eq!(s.active().unwrap().doc.settings.frame_grid.font_family, "Hiragino Mincho ProN");
+        assert_eq!(s.active().unwrap().doc.settings.frame_grid.font_family, DEFAULT_GRID_FONT.0);
         let r = s.execute("frame.create", &json!({"rect": [36, 36, 300, 300], "content": "text", "grid": true})).unwrap();
         let g = grid_of(&s, r["id"].as_u64().unwrap());
         let db = designcraft_fonts::FontDb::global();
-        if db.has_family("Hiragino Mincho ProN") {
-            assert_eq!((g.font_family.as_str(), g.font_style.as_str()), ("Hiragino Mincho ProN", "W3"));
-        } else {
-            let fallback = designcraft_doc::framegrid::GRID_FONT_FALLBACKS.iter().find(|(f, _)| db.has_family(f));
-            assert_eq!(Some(g.font_family.as_str()), fallback.map(|f| f.0).or(Some("Hiragino Mincho ProN")));
-        }
+        let installed = GRID_FONT_FALLBACKS.iter().find(|(f, _)| db.has_family(f)).copied().unwrap_or(DEFAULT_GRID_FONT);
+        assert_eq!((g.font_family.as_str(), g.font_style.as_str()), installed);
         let d = &s.active().unwrap().doc;
         let st = d.story(designcraft_doc::StoryId(r["story"].as_u64().unwrap())).unwrap();
         let f = d.styles.resolve_char(&d.styles.resolve_para(&st.paras[0]).1, st.char_format_at(0));

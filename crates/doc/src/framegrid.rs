@@ -127,19 +127,22 @@ pub struct FrameGrid {
     pub mojikumi: String,
 }
 
-/// The grid font new documents give their frame grids (a Mincho, as Japanese body text is set in).
-pub const DEFAULT_GRID_FONT: (&str, &str) = ("Hiragino Mincho ProN", "W3");
+/// The grid font new documents give their frame grids: a Mincho (as Japanese body text is set
+/// in) that is the same face on macOS, Windows and Linux, so a document's grids look alike
+/// wherever it is opened.
+pub const DEFAULT_GRID_FONT: (&str, &str) = ("Noto Serif CJK JP", "Regular");
 
-/// Mincho faces that stand in for [`DEFAULT_GRID_FONT`] where it isn't installed (Windows,
-/// Linux): (family, style), in order of preference.
+/// Mincho faces that stand in for [`DEFAULT_GRID_FONT`] where it isn't installed: (family,
+/// style), in order of preference. The same design under its other names first, then the Mincho
+/// each system ships.
 pub const GRID_FONT_FALLBACKS: &[(&str, &str)] = &[
+    ("Noto Serif CJK JP", "Regular"),
+    ("Noto Serif JP", "Regular"),
+    ("Source Han Serif JP", "Regular"),
     ("Hiragino Mincho ProN", "W3"),
     ("Yu Mincho", "Regular"),
     ("YuMincho", "Regular"),
     ("MS Mincho", "Regular"),
-    ("Noto Serif CJK JP", "Regular"),
-    ("Source Han Serif JP", "Regular"),
-    ("Noto Serif JP", "Regular"),
     ("IPAexMincho", "Regular"),
 ];
 
