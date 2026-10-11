@@ -16,7 +16,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Frame Grid Options…",
             ["Object"],
             None,
-            "{fontFamily?, fontStyle?, size?, hScale?, vScale?, charAki?, lineAki?, lineAlign?: left|center|right|leftJustified|…|null (paragraphs' own), gridAlign?: none|romanBaseline|emTop|emCenter|emBottom|icfTop|icfBottom, charAlign? (same values), count?: none|top|bottom|left|right, countSize?, view?: grid|nZ|outline, mojikumi?, chars?, lines?, columns?, gutter?, applyFormat?: bool (true: all the text takes the grid's font, size and scale; default: the text that follows the grid does, characters with their own font or size keep them), ids?} → {grids} — text frames become frame grids; the frame is resized to its cells",
+            "{fontFamily?, fontStyle?, size?, hScale?, vScale?, charAki?, lineAki?, lineAlign?: left|center|right|leftJustified|…|null (paragraphs' own), gridAlign?: none|romanBaseline|emTop|emCenter|emBottom|icfTop|icfBottom, charAlign? (same values), count?: none|top|bottom|left|right, countSize?, view?: grid|nZ|outline, fillEvery?: n (the grid view shades every n-th cell of a line; 0: none), mojikumi?, chars?, lines?, columns?, gutter?, applyFormat?: bool (true: all the text takes the grid's font, size and scale; default: the text that follows the grid does, characters with their own font or size keep them), ids?} → {grids} — text frames become frame grids; the frame is resized to its cells",
             has_text_or_frames,
             frame_grid_options
         ),
@@ -104,7 +104,7 @@ pub fn specs() -> Vec<CommandSpec> {
 }
 
 /// Keys of a grid in command parameters.
-const GRID_KEYS: [&str; 14] = [
+const GRID_KEYS: [&str; 15] = [
     "fontFamily",
     "fontStyle",
     "size",
@@ -118,6 +118,7 @@ const GRID_KEYS: [&str; 14] = [
     "count",
     "countSize",
     "view",
+    "fillEvery",
     "mojikumi",
 ];
 
@@ -278,7 +279,7 @@ fn frame_grid_options(s: &mut Session, p: &Value) -> Result<Value> {
             }
             let vertical = d.frame_vertical(it);
             let had = tf.options.frame_grid.clone();
-            let old = had.clone().unwrap_or_else(|| with_installed_font(d.settings.frame_grid.clone()));
+            let old = had.as_deref().cloned().unwrap_or_else(|| with_installed_font(d.settings.frame_grid.clone()));
             let g = grid_with(&old, &p, ID)?;
             let (c0, l0) = counts(d, it, if had.is_some() { &old } else { &g });
             let columns = p.get("columns").and_then(Value::as_u64).map_or(tf.options.columns, |v| v.clamp(1, 40) as u32);
@@ -293,7 +294,7 @@ fn frame_grid_options(s: &mut Session, p: &Value) -> Result<Value> {
             let story = tf.story;
             let Some(it) = d.item_mut(*id) else { continue };
             if let Some(tf) = it.text_frame_mut() {
-                tf.options.frame_grid = Some(g.clone());
+                tf.options.frame_grid = Some(Box::new(g.clone()));
                 tf.options.columns = columns;
                 tf.options.gutter = gutter;
             }
@@ -424,7 +425,7 @@ fn apply_grid_format(s: &mut Session, _p: &Value) -> Result<Value> {
 /// didn't move. Only rectangles are snapped.
 pub(crate) fn snap_grid_frame(it: &mut Item, before: Rect, vertical: bool) {
     let Some(o) = it.text_frame().map(|t| t.options.clone()) else { return };
-    let Some(g) = o.frame_grid.as_ref().map(FrameGrid::sanitized) else { return };
+    let Some(g) = o.frame_grid.as_ref().map(|g| g.sanitized()) else { return };
     if it.shape != Shape::Rectangle {
         return;
     }
@@ -476,7 +477,7 @@ mod tests {
 
     fn grid_of(s: &Session, id: u64) -> designcraft_doc::FrameGrid {
         let d = &s.active().unwrap().doc;
-        d.item(designcraft_doc::ItemId(id)).and_then(|i| i.text_frame()).and_then(|t| t.options.frame_grid.clone()).unwrap()
+        d.item(designcraft_doc::ItemId(id)).and_then(|i| i.text_frame()).and_then(|t| t.options.frame_grid.as_deref().cloned()).unwrap()
     }
 
     #[test]
@@ -576,6 +577,13 @@ mod tests {
         assert!(s.execute("object.frameGridOptions", &json!({"ids": [id], "gridAlign": "sideways"})).is_err());
         assert!(s.execute("object.frameGridOptions", &json!({"ids": [id], "mojikumi": "vendor table"})).is_err());
         s.execute("object.frameGridOptions", &json!({"ids": [id], "chars": 1e12, "lines": -3})).unwrap();
+        // The shaded cell count: set, capped, and rejected when it isn't a count.
+        s.execute("object.frameGridOptions", &json!({"ids": [id], "fillEvery": 5})).unwrap();
+        assert_eq!(grid_of(&s, id).fill_every, 5);
+        s.execute("object.frameGridOptions", &json!({"ids": [id], "fillEvery": 4_000_000_000u32})).unwrap();
+        assert_eq!(grid_of(&s, id).fill_every, designcraft_doc::framegrid::MAX_GRID_COUNT);
+        assert!(s.execute("object.frameGridOptions", &json!({"ids": [id], "fillEvery": -1})).is_err());
+        assert!(s.execute("object.frameGridOptions", &json!({"ids": [id], "fillEvery": "ten"})).is_err());
         assert!(s.execute("type.mojikumi", &json!({"set": "nope"})).is_err());
     }
 

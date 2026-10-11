@@ -1667,7 +1667,7 @@ fn draw_frame_grids(app: &DesignApp, painter: &egui::Painter, xf: &Xf, doc: &Doc
                 continue;
             }
             let (Some((a, _)), Some(tf)) = (item_canvas_xf(doc, layout, it.id), it.text_frame()) else { continue };
-            let Some(g) = tf.options.frame_grid.as_ref().map(designcraft_doc::FrameGrid::sanitized) else { continue };
+            let Some(g) = tf.options.frame_grid.as_ref().map(|g| g.sanitized()) else { continue };
             let vertical = doc.frame_vertical(it);
             let m = a * doc.text_xf(it);
             let col = layer_color(doc, it).gamma_multiply(0.55);
@@ -1688,7 +1688,13 @@ fn draw_frame_grids(app: &DesignApp, painter: &egui::Painter, xf: &Xf, doc: &Doc
             for c in &spec_cols {
                 match view {
                     designcraft_doc::GridView::Grid => {
-                        for r in g.cells(*c, vertical, MAX_CELLS) {
+                        let n = chars as usize;
+                        let fill = col.gamma_multiply(0.35);
+                        for (i, r) in g.cells(*c, vertical, MAX_CELLS).into_iter().enumerate() {
+                            // Every n-th cell of a line is shaded, to count characters by.
+                            if g.fills_cell(i.checked_rem(n).unwrap_or(0)) {
+                                painter.add(egui::Shape::convex_polygon(quad(r), fill, Stroke::NONE));
+                            }
                             painter.add(egui::Shape::closed_line(quad(r), stroke));
                         }
                     }

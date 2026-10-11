@@ -1858,4 +1858,6 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ("Pin Bar Position", "バーの位置を固定"),
     ("Reset Bar Position", "バーの位置をリセット"),
     ("Ideographic Space", "全角スペース（和字間隔）"),
+    ("Fill Every:", "塗りの間隔："),
+    ("Shades every n-th cell of a line (0: none)", "行頭から n マスごとに塗りを入れます (0: なし)"),
 ];

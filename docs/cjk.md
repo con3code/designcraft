@@ -181,7 +181,7 @@ Jidori, tsume, aki before and after, em-box alignment and the other leading mode
 
 - Model: `TextFrameOptions.frame_grid: Option<FrameGrid>` (font, size, horizontal/vertical scale,
   character aki, line aki, line alignment override, grid alignment, character alignment, character
-  count position and size, view, mojikumi set); `DocSettings.frame_grid` is the grid new frame
+  count position and size, view, the cell shaded every n-th, mojikumi set); `DocSettings.frame_grid` is the grid new frame
   grids get (font Noto Serif CJK JP Regular in new documents, the same face on every platform; where
   it isn't installed, new grids take the first installed of Noto Serif JP, Source Han Serif JP,
   Hiragino Mincho ProN, Yu Mincho, MS Mincho, IPAexMincho). Character and line counts are not stored: they follow from the frame size (columns

@@ -121,6 +121,9 @@ pub struct FrameGrid {
     pub count: GridCount,
     pub count_size: f64,
     pub view: GridView,
+    /// Every how many cells from a line's start a cell is shaded in the grid view, to count
+    /// characters by (10: the 10th, 20th, … cell of every line). 0: none.
+    pub fill_every: u32,
     /// Mojikumi set for text in the grid (a paragraph's own set wins). Empty: none, every
     /// character and punctuation mark takes a whole cell. New grids use `DEFAULT_GRID_MOJIKUMI`.
     /// Always written: a missing value reads as the default set, an empty one as none.
@@ -165,6 +168,7 @@ impl Default for FrameGrid {
             char_align: GridAlignment::EmCenter,
             count: GridCount::Bottom,
             count_size: 9.0,
+            fill_every: 10,
             view: GridView::Grid,
             mojikumi: DEFAULT_GRID_MOJIKUMI.into(),
         }
@@ -178,6 +182,11 @@ pub const MAX_GRID_COUNT: u32 = 1000;
 impl FrameGrid {
     /// The grid with every number finite and in range (sizes positive, scales 1 %–1000 %, aki
     /// no more negative than the cell).
+    /// Whether the grid view shades cell `k` of a line (0 is the first): every `fill_every`-th.
+    pub fn fills_cell(&self, k: usize) -> bool {
+        self.fill_every > 0 && k.checked_add(1).is_some_and(|n| n.is_multiple_of(self.fill_every as usize))
+    }
+
     pub fn sanitized(&self) -> FrameGrid {
         let fin = |v: f64, d: f64| if v.is_finite() { v } else { d };
         let size = fin(self.size, 12.0).clamp(0.5, MAX_GRID_SIZE);
@@ -191,6 +200,7 @@ impl FrameGrid {
             char_aki: fin(self.char_aki, 0.0).clamp(-0.9 * along, MAX_GRID_SIZE),
             line_aki: fin(self.line_aki, 0.0).clamp(-0.9 * along, MAX_GRID_SIZE),
             count_size: fin(self.count_size, 9.0).clamp(1.0, 200.0),
+            fill_every: self.fill_every.min(MAX_GRID_COUNT),
             ..self.clone()
         }
     }
@@ -277,6 +287,22 @@ impl FrameGrid {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_nth_cell_of_a_line_is_shaded() {
+        let g = FrameGrid::default();
+        assert_eq!(g.fill_every, 10);
+        let shaded: Vec<usize> = (0..25).filter(|k| g.fills_cell(*k)).collect();
+        assert_eq!(shaded, [9, 19]);
+        let none = FrameGrid { fill_every: 0, ..FrameGrid::default() };
+        assert!((0..100).all(|k| !none.fills_cell(k)));
+        let all = FrameGrid { fill_every: 1, ..FrameGrid::default() };
+        assert!((0..5).all(|k| all.fills_cell(k)));
+        // A hostile count is capped, and the last cell index doesn't overflow.
+        let big = FrameGrid { fill_every: u32::MAX, ..FrameGrid::default() }.sanitized();
+        assert_eq!(big.fill_every, MAX_GRID_COUNT);
+        assert!(!FrameGrid { fill_every: 7, ..FrameGrid::default() }.fills_cell(usize::MAX));
+    }
 
     #[test]
     fn grid_sizes_follow_counts_and_back() {

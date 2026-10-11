@@ -1905,4 +1905,6 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ("a, b, c, d...", "a, b, c, d..."),
     ("i, ii, iii, iv...", "i, ii, iii, iv..."),
     ("Ideographic Space", "전각 공백(한자)"),
+    ("Fill Every:", "칠 간격:"),
+    ("Shades every n-th cell of a line (0: none)", "줄 처음부터 n칸마다 칠합니다 (0: 없음)"),
 ];

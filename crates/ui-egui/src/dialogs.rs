@@ -1119,7 +1119,7 @@ pub fn open_frame_grid_options(app: &mut DesignApp) {
         "fontFamily": s(&grid["fontFamily"]), "fontStyle": s(&grid["fontStyle"]), "size": pt(&grid["size"]),
         "vScale": pct(&grid["vScale"]), "hScale": pct(&grid["hScale"]), "charAki": pt(&grid["charAki"]), "lineAki": pt(&grid["lineAki"]),
         "lineAlign": grid["lineAlign"].as_str().unwrap_or("paragraph"), "gridAlign": s(&grid["gridAlign"]), "charAlign": s(&grid["charAlign"]),
-        "count": s(&grid["count"]), "countSize": pt(&grid["countSize"]), "view": s(&grid["view"]), "mojikumi": s(&grid["mojikumi"]),
+        "count": s(&grid["count"]), "countSize": pt(&grid["countSize"]), "view": s(&grid["view"]), "fillEvery": n(&grid["fillEvery"]), "mojikumi": s(&grid["mojikumi"]),
         "chars": n(&chars), "lines": n(&lines), "columns": n(&columns), "gutter": pt(&gutter),
     });
     app.ui.dialog = Some(Dialog::new("frameGridOptions", f));
@@ -1220,6 +1220,8 @@ fn frame_grid_options(app: &DesignApp, ui: &mut egui::Ui, d: &mut Dialog) {
         ui.end_row();
         crate::rtl::label(ui, tr("View:"));
         choice(app, ui, d, "view", &[("grid", "Grid"), ("nZ", "N/Z View"), ("outline", "Outline")], 100.0);
+        crate::rtl::label(ui, tr("Fill Every:")).on_hover_text(tr("Shades every n-th cell of a line (0: none)"));
+        text_field(ui, d, "fillEvery", 60.0);
         ui.end_row();
     });
     ui.add_space(6.0);
@@ -1260,6 +1262,9 @@ fn frame_grid_params(d: &Dialog) -> Value {
         if let Some(v) = d.n(k).filter(|v| v.is_finite() && *v >= 1.0) {
             p.insert(k.into(), json!(v.round()));
         }
+    }
+    if let Some(v) = d.n("fillEvery").filter(|v| v.is_finite() && *v >= 0.0) {
+        p.insert("fillEvery".into(), json!(v.round().min(f64::from(designcraft_doc::framegrid::MAX_GRID_COUNT))));
     }
     Value::Object(p)
 }

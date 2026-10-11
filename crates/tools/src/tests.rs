@@ -330,7 +330,7 @@ fn double_click_with_selection_tool_enters_text() {
     let rect = Rect::new(100.0, 100.0, 300.0, 200.0);
     let (fid, _) = d.add_text_frame(SpreadRef::Doc(0), rect, d.default_layer(), "", Default::default()).unwrap();
     if let Some(tf) = d.item_mut(fid).and_then(designcraft_doc::Item::text_frame_mut) {
-        tf.options.frame_grid = Some(designcraft_doc::FrameGrid::default());
+        tf.options.frame_grid = Some(Box::new(designcraft_doc::FrameGrid::default()));
     }
     let (s, c, l) = (Selection::default(), Cache::new(), CanvasLayout::new(&d, false));
     let cx = ctx(&d, &s, &c, &l);
