@@ -519,6 +519,9 @@ pub struct DesignApp {
     pub native_shortcuts: std::collections::HashSet<String>,
     /// Text the input method is composing at the text caret (shown there, not yet in the story).
     pub preedit: String,
+    /// The text typed last came through the input method (it is in a Japanese, Chinese or
+    /// Korean mode), not straight from the keys: see [`canvas::typed_text`].
+    pub ime_typing: bool,
     /// The document as the canvas shows it while composing: the composition typed at the caret.
     pub preedit_view: Option<PreeditView>,
     last_time: f64,
@@ -561,6 +564,7 @@ impl DesignApp {
             native_menu: false,
             native_shortcuts: Default::default(),
             preedit: String::new(),
+            ime_typing: false,
             preedit_view: None,
             last_time: 0.0,
             last_recovery: 0.0,

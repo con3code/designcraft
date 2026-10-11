@@ -485,6 +485,18 @@ fn render_texture(app: &mut DesignApp, ctx: &egui::Context, rect: Rect, xf: &Xf,
     }
 }
 
+/// The text a key typed, given `text` as the window system reports it.
+///
+/// On macOS the Space key in a Japanese (or Chinese) input mode types an ideographic space, but
+/// the window layer drops what the input method inserts when nothing is being composed and
+/// reports the key's own character, a plain space. While the text before it came through the
+/// input method (`ime_typing`), a plain space is therefore the ideographic one; with Shift it is
+/// the plain space, as the input methods have it. Letters typed straight from the keys (the
+/// Roman mode) end that, and Type › Insert White Space has both spaces whatever the mode.
+pub(crate) fn typed_text(text: &str, ime_typing: bool, shift: bool, macos: bool) -> &str {
+    if macos && ime_typing && !shift && text == " " { "\u{3000}" } else { text }
+}
+
 /// Repaint only the damaged regions of the current texture after an edit (typing, nudging).
 /// Returns false when a full render is needed (view moved, too much changed, or damage unknown).
 fn patch_texture(app: &mut DesignApp, layout: &CanvasLayout, ppp: f64, doc_key: (u64, u64, u64, bool), preview: bool) -> bool {
@@ -1576,11 +1588,18 @@ fn handle_input(app: &mut DesignApp, ui: &mut egui::Ui, resp: &egui::Response, r
                 app.preedit.clear();
                 app.preedit_view = None;
                 if !t.is_empty() {
+                    app.ime_typing = true;
                     let _ = app.run("text.insert", json!({"text": t}));
                 }
             }
             egui::Event::Text(t) if wants_text => {
-                let _ = app.run("text.insert", json!({"text": t}));
+                let shift = ui.input(|i| i.modifiers.shift);
+                let typed = typed_text(&t, app.ime_typing, shift, cfg!(target_os = "macos"));
+                // Letters straight from the keys: the input method is in its Roman mode.
+                if !t.trim().is_empty() {
+                    app.ime_typing = false;
+                }
+                let _ = app.run("text.insert", json!({"text": typed}));
             }
             egui::Event::Paste(t) if wants_text => {
                 // Formatted when the system clipboard still holds what was copied here;
@@ -1991,6 +2010,19 @@ mod tests {
     /// A viewport wider than the GPU's largest texture: the canvas texture is sampled down, and an
     /// edit repaints it whole. A region repainted in view pixels would land in the wrong place,
     /// or outside the texture (a wgpu validation error). A view that fits is still patched.
+    /// The Space key after text typed through the input method is the ideographic space on macOS
+    /// (the window layer reports a plain one); Shift, the Roman mode and other systems keep it.
+    #[test]
+    fn space_after_input_method_text_is_the_ideographic_space() {
+        assert_eq!(typed_text(" ", true, false, true), "\u{3000}");
+        assert_eq!(typed_text(" ", true, true, true), " ", "Shift+Space");
+        assert_eq!(typed_text(" ", false, false, true), " ", "Roman mode");
+        assert_eq!(typed_text(" ", true, false, false), " ", "other systems report what the input method typed");
+        assert_eq!(typed_text("a", true, false, true), "a");
+        assert_eq!(typed_text("\u{3000}", false, false, true), "\u{3000}");
+        assert_eq!(typed_text("  ", true, false, true), "  ");
+    }
+
     #[test]
     fn an_edit_repaints_a_canvas_texture_sampled_down_to_the_gpu_limit_whole() {
         for (width, sampled_down) in [(1440.0, false), (2600.0, true)] {

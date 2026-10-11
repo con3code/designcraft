@@ -1904,4 +1904,5 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ("Window/Utilities", "윈도우/유틸리티"),
     ("a, b, c, d...", "a, b, c, d..."),
     ("i, ii, iii, iv...", "i, ii, iii, iv..."),
+    ("Ideographic Space", "전각 공백(한자)"),
 ];

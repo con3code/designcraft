@@ -1857,4 +1857,5 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ("Distribute Rows Evenly", "行の高さを均等にする"),
     ("Pin Bar Position", "バーの位置を固定"),
     ("Reset Bar Position", "バーの位置をリセット"),
+    ("Ideographic Space", "全角スペース（和字間隔）"),
 ];

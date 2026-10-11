@@ -1886,4 +1886,5 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ("Window/Utilities", "窗口/实用程序"),
     ("a, b, c, d...", "a, b, c, d..."),
     ("i, ii, iii, iv...", "i, ii, iii, iv..."),
+    ("Ideographic Space", "表意字空格（全角）"),
 ];

@@ -356,6 +356,7 @@ pub const MENUS: &[(&str, &[&str])] = &[
             "<",
             "<",
             ">Insert White Space",
+            "cmd:text.insert|Ideographic Space|{\"text\": \"\u{3000}\", \"raw\": true}",
             "cmd:text.insert|Em Space|{\"text\": \"\u{2003}\", \"raw\": true}",
             "cmd:text.insert|En Space|{\"text\": \"\u{2002}\", \"raw\": true}",
             "cmd:text.insert|Nonbreaking Space|{\"text\": \"\u{a0}\", \"raw\": true}",
@@ -2569,9 +2570,15 @@ mod tests {
         window_frame(&ctx, &mut app, vec![egui::Event::Ime(egui::ImeEvent::Commit("日本語".into()))]);
         assert!(app.preedit.is_empty());
         assert_eq!(caret_story_text(&app), "日本語");
-        // Plain typing still works beside it.
+        // The Space key in the input method's mode: on macOS the window layer reports a plain
+        // space where the input method typed an ideographic one (see `canvas::typed_text`).
+        window_frame(&ctx, &mut app, vec![egui::Event::Text(" ".into())]);
+        let space = if cfg!(target_os = "macos") { "\u{3000}" } else { " " };
+        assert_eq!(caret_story_text(&app), format!("日本語{space}"));
+        // Plain typing still works beside it, and its spaces are plain.
         window_frame(&ctx, &mut app, vec![egui::Event::Text("ABC".into())]);
-        assert_eq!(caret_story_text(&app), "日本語ABC");
+        window_frame(&ctx, &mut app, vec![egui::Event::Text(" ".into())]);
+        assert_eq!(caret_story_text(&app), format!("日本語{space}ABC "));
     }
 
     /// Two presses on a frame grid with the Selection tool (a real double-click, as egui reports
