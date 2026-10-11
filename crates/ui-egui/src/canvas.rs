@@ -1557,8 +1557,8 @@ fn handle_input(app: &mut DesignApp, ui: &mut egui::Ui, resp: &egui::Response, r
     if resp.clicked() || resp.drag_started() {
         resp.request_focus();
     }
-    // Keyboard for the active tool.
-    if ui.ctx().text_edit_focused() && !resp.has_focus() {
+    // Both split panes show the same document, but only the focused pane dispatches its keys.
+    if app.pane != app.focus_pane || (ui.ctx().text_edit_focused() && !resp.has_focus()) {
         return;
     }
     // Input methods (Japanese, Chinese, Korean…): on while there is a text caret, their candidate

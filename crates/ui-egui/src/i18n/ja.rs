@@ -1860,4 +1860,8 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ("Ideographic Space", "全角スペース（和字間隔）"),
     ("Fill Every:", "塗りの間隔："),
     ("Shades every n-th cell of a line (0: none)", "行頭から n マスごとに塗りを入れます (0: なし)"),
+    ("Change Panel Layout", "パネルの配置を変更"),
+    ("Move Panel", "パネルを移動"),
+    ("Activate Panel", "パネルをアクティブにする"),
+    ("Close Panel", "パネルを閉じる"),
 ];

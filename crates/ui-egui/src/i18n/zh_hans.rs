@@ -1889,4 +1889,8 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ("Ideographic Space", "表意字空格（全角）"),
     ("Fill Every:", "填色间隔："),
     ("Shades every n-th cell of a line (0: none)", "从行首起每隔 n 格填色 (0: 无)"),
+    ("Change Panel Layout", "更改面板布局"),
+    ("Move Panel", "移动面板"),
+    ("Activate Panel", "激活面板"),
+    ("Close Panel", "关闭面板"),
 ];

@@ -1907,4 +1907,8 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ("Ideographic Space", "전각 공백(한자)"),
     ("Fill Every:", "칠 간격:"),
     ("Shades every n-th cell of a line (0: none)", "줄 처음부터 n칸마다 칠합니다 (0: 없음)"),
+    ("Change Panel Layout", "패널 레이아웃 변경"),
+    ("Move Panel", "패널 이동"),
+    ("Activate Panel", "패널 활성화"),
+    ("Close Panel", "패널 닫기"),
 ];
