@@ -1119,6 +1119,18 @@ fn draw_preedit(app: &DesignApp, painter: &egui::Painter, xf: &Xf, doc: &Documen
         }
     }
     draw_text_selection(app, painter, xf, doc, layout, caret, None);
+    // The candidate window stays where the composition starts (the caret, at its end, moves with
+    // every character typed).
+    if v.sel.cell.is_none() {
+        let cs = app.session.cache.get(doc, v.sel.story, None);
+        if let Some((fi, x, bl, asc, desc)) = compose::caret(&cs, v.range.start)
+            && let Some(ft) = cs.frames.get(fi)
+            && let (Some((a, _)), Some(it)) = (item_canvas_xf(doc, layout, ft.frame), doc.item(ft.frame))
+        {
+            let m = a * doc.text_xf(it);
+            caret_for_ime(painter, xf.to_screen(m * Point::new(x, bl - asc)), xf.to_screen(m * Point::new(x, bl + desc)));
+        }
+    }
 }
 
 /// Caret / text highlight inside a table cell (the cell's lines are offset by the cell origin).
@@ -1557,6 +1569,14 @@ fn handle_input(app: &mut DesignApp, ui: &mut egui::Ui, resp: &egui::Response, r
     if resp.clicked() || resp.drag_started() {
         resp.request_focus();
     }
+    // The canvas keeps the keyboard: egui otherwise moves the focus to another widget on an arrow
+    // key or Tab and drops it on Escape, keys that belong to the tools and the text here. Without
+    // the focus the input method is turned off, in the middle of typing.
+    if resp.has_focus() {
+        ui.memory_mut(|m| {
+            m.set_focus_lock_filter(resp.id, egui::EventFilter { tab: true, horizontal_arrows: true, vertical_arrows: true, escape: true })
+        });
+    }
     // Both split panes show the same document, but only the focused pane dispatches its keys.
     if app.pane != app.focus_pane || (ui.ctx().text_edit_focused() && !resp.has_focus()) {
         return;
@@ -1567,10 +1587,20 @@ fn handle_input(app: &mut DesignApp, ui: &mut egui::Ui, resp: &egui::Response, r
     if wants_text && resp.has_focus() {
         let caret: Option<(Pos2, Pos2)> = ui.data(|d| d.get_temp(egui::Id::new(IME_CARET)));
         let (p0, p1) = caret.unwrap_or((rect.center(), rect.center()));
-        let cursor = egui::Rect::from_two_pos(p0, p1).expand(1.0);
+        // Kept inside the canvas: a caret scrolled out of view would send the window off screen.
+        let cursor = egui::Rect::from_two_pos(p0, p1).expand(1.0).intersect(rect.expand(1.0));
+        let cursor = if cursor.is_positive() { cursor } else { egui::Rect::from_center_size(rect.center(), vec2(2.0, 2.0)) };
+        // The window system places the candidate window by `rect` (egui-winit passes it, not
+        // `cursor_rect`, to the system): it has to be the caret, not the canvas. Given the
+        // whole canvas, Windows puts the candidates wherever there is room outside it, a
+        // different place for every key.
         ui.ctx().output_mut(|o| {
-            o.ime =
-                Some(egui::output::IMEOutput { purpose: egui::IMEPurpose::Normal, rect, cursor_rect: cursor, should_interrupt_composition: false })
+            o.ime = Some(egui::output::IMEOutput {
+                purpose: egui::IMEPurpose::Normal,
+                rect: cursor,
+                cursor_rect: cursor,
+                should_interrupt_composition: false,
+            })
         });
     } else if !app.preedit.is_empty() {
         app.preedit.clear();

@@ -2601,6 +2601,21 @@ mod tests {
         window_frame(&ctx, &mut app, vec![egui::Event::Ime(egui::ImeEvent::Commit("日本語".into()))]);
         assert!(app.preedit.is_empty());
         assert_eq!(caret_story_text(&app), "日本語");
+        // The input method is told where the caret is, not the whole canvas: the system puts the
+        // candidate window by that rectangle.
+        let out = window_frame(&ctx, &mut app, vec![]);
+        let ime = out.ime.expect("input method on");
+        let canvas = app.canvas_rect.unwrap();
+        assert!(ime.rect.width() < 8.0 && ime.rect.height() < canvas.height() / 4.0, "{:?} in canvas {canvas:?}", ime.rect);
+        assert!(canvas.expand(2.0).contains_rect(ime.rect), "{:?} outside {canvas:?}", ime.rect);
+        // Arrow keys, Tab and Escape stay with the canvas: the input method isn't turned off by
+        // egui moving the keyboard focus to another widget.
+        for key in [egui::Key::ArrowLeft, egui::Key::ArrowRight, egui::Key::ArrowDown, egui::Key::ArrowUp, egui::Key::ArrowRight] {
+            let press = egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() };
+            window_frame(&ctx, &mut app, vec![press]);
+            let out = window_frame(&ctx, &mut app, vec![]);
+            assert!(out.ime.is_some(), "the input method stays on after {key:?}");
+        }
         // The Space key in the input method's mode: on macOS the window layer reports a plain
         // space where the input method typed an ideographic one (see `canvas::typed_text`).
         window_frame(&ctx, &mut app, vec![egui::Event::Text(" ".into())]);
