@@ -1,0 +1,5 @@
+file.new {"width": 420, "height": 170, "margins": 20, "facingPages": false}
+frame.create {"rect": [20, 20, 400, 150], "content": "text", "caret": true, "text": "「本」。「字」、と書く。\n（『二重』）の括弧。\n「問い」？と「答え」。"}
+edit.selectAll
+type.char {"attrs": {"fontFamily": "Hiragino Mincho ProN", "fontStyle": "W3", "size": 24}}
+type.para {"attrs": {"mojikumi": "LineEndAllOneHalfEmEnum"}}
