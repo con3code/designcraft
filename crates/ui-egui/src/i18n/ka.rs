@@ -1873,4 +1873,9 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ("Transparency…", "გამჭვირვალობა…"),
     ("Strokes and Fills…", "კონტურები და შევსებები…"),
     ("Show/Hide Document Grid", "დოკუმენტის ბადის ჩვენება/დამალვა"),
+    ("Apply Grid Format", "ბადის ფორმატის გამოყენება"),
+    ("Frame Type", "ჩარჩოს ტიპი"),
+    ("Frame Grid", "ჩარჩოს ბადე"),
+    ("Frame Grid Options…", "ჩარჩოს ბადის პარამეტრები…"),
+    ("Show/Hide Frame Grids", "ჩარჩოს ბადეების ჩვენება/დამალვა"),
 ];
