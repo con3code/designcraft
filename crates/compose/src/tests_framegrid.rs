@@ -199,3 +199,32 @@ fn hostile_frame_grids_compose_without_panicking() {
     let _ = compose_story(&d, sid, &ComposeOptions::default());
     let _ = GridAlignment::ALL;
 }
+
+/// A frame grid's text takes its paragraph's mojikumi set (#129's engine) as text anywhere else
+/// does: with none every mark takes a cell; with Line End Half-Width a closing bracket at a line
+/// end and an opening bracket at a line start take half a cell, and the characters after it
+/// follow on from there.
+#[test]
+fn frame_grid_text_takes_the_paragraphs_mojikumi() {
+    for vertical in [false, true] {
+        for (name, end, start) in [("", 12.0, [0.0, 12.0, 24.0]), ("LineEndAllOneHalfEmEnum", 7.0, [-5.0, 7.0, 19.0])] {
+            let (mut d, sid, _) = grid_doc("漢漢漢漢」「漢漢", grid(), 5, 3, vertical);
+            let st = d.story_mut(sid).unwrap();
+            let n = st.len();
+            st.format_paras(0..n, |p| p.para.mojikumi = Some(name.into()));
+            let cs = compose_story(&d, sid, &ComposeOptions::default());
+            assert!(!cs.is_overset(), "{name}");
+            let ls = &cs.frames[0].lines;
+            assert_eq!(ls.len(), 2, "{name}");
+            let first: Vec<_> = ls[0].glyphs.iter().filter(|g| g.len > 0).collect();
+            let close = first.last().unwrap();
+            assert_eq!((close.rendered_char, first.len()), ('」', 5), "{name}");
+            assert!((close.x - 48.0).abs() < 1e-6 && (close.adv - end).abs() < 1e-6, "{name} vertical {vertical}: {:?}", (close.x, close.adv));
+            let second: Vec<f64> = ls[1].glyphs.iter().filter(|g| g.len > 0).map(|g| g.x).collect();
+            assert_eq!(second.len(), 3, "{name}");
+            for (x, want) in second.iter().zip(start) {
+                assert!((x - want).abs() < 1e-6, "{name} vertical {vertical}: {second:?}");
+            }
+        }
+    }
+}
