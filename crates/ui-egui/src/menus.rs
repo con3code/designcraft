@@ -6,12 +6,43 @@ use crate::{DesignApp, ScreenMode};
 
 /// Menu and Quick Apply entries that only CJK typesetting uses: hidden unless
 /// [`crate::cjk_features`]. The commands still run from scripts, the control channel and MCP.
-pub const CJK_ONLY: &[&str] = &["type.tateChuYoko", "app.rubyDialog", "type.kenten", "type.warichu"];
+pub const CJK_ONLY: &[&str] = &[
+    "type.tateChuYoko",
+    "app.rubyDialog",
+    "type.kenten",
+    "type.warichu",
+    // Frame grids: Object › Frame Grid Options and Frame Type, Edit › Apply Grid Format,
+    // View › Grids & Guides › Show/Hide Frame Grids.
+    "object.frameGridOptions",
+    "object.frameType",
+    "type.applyGridFormat",
+    "view.frameGrids",
+];
+
+/// Tools that only CJK typesetting uses: off the Tools panel and their shortcuts unless
+/// [`crate::cjk_features`]. `tool.select` still selects them.
+pub const CJK_TOOLS: &[&str] = &["horizontalGrid", "verticalGrid"];
 
 /// Whether command `id` has a menu item or Quick Apply entry in the current interface (CJK-only
 /// ones need [`crate::cjk_features`]).
 pub fn shown(app: &DesignApp, id: &str) -> bool {
     !CJK_ONLY.contains(&id) || crate::cjk_features(app)
+}
+
+/// Whether tool `id` is on the Tools panel and its shortcut selects it (see [`CJK_TOOLS`]).
+pub fn tool_shown(app: &DesignApp, id: &str) -> bool {
+    !CJK_TOOLS.contains(&id) || crate::cjk_features(app)
+}
+
+/// Whether a submenu shows: one whose items are all hidden CJK commands (Object › Frame Type) is
+/// left out. Submenus filled as they open (Open Recent) start empty and show.
+pub fn sub_shown(app: &DesignApp, children: &[Item]) -> bool {
+    children.is_empty()
+        || children.iter().any(|i| match i {
+            Item::Sep => false,
+            Item::Sub(_, c) => sub_shown(app, c),
+            Item::Cmd { id, .. } => shown(app, id),
+        })
 }
 
 /// UI commands: (id, label, shortcut, params).
@@ -2888,6 +2919,7 @@ fn menu_items(app: &mut DesignApp, ui: &mut egui::Ui, items: &[Item], path: &str
             Item::Sep => {
                 ui.separator();
             }
+            Item::Sub(_, children) if !sub_shown(app, children) => {}
             Item::Sub(name, children) => {
                 let sub = format!("{path}/{name}");
                 let shown = crate::i18n::tr(&app.ui.language, name).to_owned();
@@ -3092,6 +3124,9 @@ pub fn shortcuts(app: &mut DesignApp, ctx: &egui::Context) {
                 if id == "edit.clear" || (typing && matches!(id, "edit.copy" | "edit.cut" | "edit.paste" | "edit.pasteInPlace")) {
                     continue; // Handled by the active tool / text clipboard events.
                 }
+                if !shown(app, id) {
+                    continue; // A hidden CJK command: its menu item isn't there either.
+                }
                 fired = Some((id.to_string(), exact));
                 break;
             }
@@ -3113,7 +3148,7 @@ pub fn shortcuts(app: &mut DesignApp, ctx: &egui::Context) {
         if !typing && !modifiers.command && !modifiers.alt {
             let name = key.name();
             let sc = if modifiers.shift { format!("Shift+{name}") } else { name.to_string() };
-            if let Some(tool) = designcraft_tools::tool_for_shortcut(&sc) {
+            if let Some(tool) = designcraft_tools::tool_for_shortcut(&sc).filter(|t| tool_shown(app, t)) {
                 log::debug!("tool shortcut {sc} -> {tool}");
                 if std::env::var_os("DESIGNCRAFT_DEBUG_KEYS").is_some() {
                     eprintln!("tool shortcut {sc} ({key:?}, {modifiers:?}) -> {tool}");
@@ -4360,6 +4395,58 @@ mod tests {
         frame(&mut app, vec![]);
         frame(&mut app, key(egui::Key::ArrowRight));
         assert_ne!(app.session.active().unwrap().doc.item(id).unwrap().bounds(), bounds);
+    }
+
+    /// Frame grids are a CJK feature (docs/cjk.md, Decision 1): their menu items, the Frame Type
+    /// submenu, the grid tools and their shortcuts show with Show CJK Features only. Hidden, the
+    /// commands and tools still run.
+    #[test]
+    fn frame_grid_menus_and_tools_follow_show_cjk_features() {
+        let mut app = crate::DesignApp::new(designcraft_engine::Session::new(), crate::Services::default());
+        app.session.execute("file.new", &json!({})).unwrap();
+        let ctx = egui::Context::default();
+        let press_y = |app: &mut crate::DesignApp| {
+            let _ = app.run("tool.select", json!({"tool": "selection"}));
+            let key = |pressed| egui::Event::Key { key: egui::Key::Y, physical_key: None, pressed, repeat: false, modifiers: Default::default() };
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 900.0))),
+                events: vec![key(true), key(false)],
+                ..Default::default()
+            };
+            let mut out = ctx.run_ui(input, |ui| {
+                app.logic(&ui.ctx().clone());
+                app.ui(ui);
+            });
+            out.textures_delta.clear();
+            app.session.tool_id().to_string()
+        };
+        let object = menu_tree().into_iter().find(|(m, _)| *m == "Object").unwrap().1;
+        let frame_type = object
+            .iter()
+            .find_map(|i| match i {
+                Item::Sub(name, c) if name == "Frame Type" => Some(c.clone()),
+                _ => None,
+            })
+            .unwrap();
+        for (lang, on) in [("", false), ("de", false), ("ja", true), ("zh", true), ("zh-hant", true), ("ko", true)] {
+            app.ui.language = lang.into();
+            for id in ["object.frameGridOptions", "object.frameType", "type.applyGridFormat", "view.frameGrids"] {
+                assert_eq!(shown(&app, id), on, "{lang}: {id}");
+            }
+            assert_eq!(sub_shown(&app, &frame_type), on, "{lang}: Frame Type");
+            assert_eq!(tool_shown(&app, "horizontalGrid") && tool_shown(&app, "verticalGrid"), on, "{lang}");
+            assert!(tool_shown(&app, "verticalType"), "the vertical type tool is in every edition");
+            assert_eq!(press_y(&mut app) == "horizontalGrid", on, "{lang}: Y");
+        }
+        app.ui.language = String::new();
+        app.run("prefs.set", json!({"cjkFeatures": true})).unwrap();
+        assert!(shown(&app, "object.frameGridOptions") && press_y(&mut app) == "horizontalGrid", "on in an English interface");
+        app.run("prefs.set", json!({"cjkFeatures": false})).unwrap();
+        // Hidden, not removed.
+        app.run("tool.select", json!({"tool": "horizontalGrid"})).unwrap();
+        assert_eq!(app.session.tool_id(), "horizontalGrid");
+        assert!(app.session.execute("frame.create", &json!({"rect": [36, 36, 300, 300], "content": "text", "grid": true})).is_ok());
+        assert!(sub_shown(&app, &[]), "submenus filled as they open (Open Recent) show");
     }
 
     #[test]
