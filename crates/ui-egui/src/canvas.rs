@@ -2540,7 +2540,6 @@ fn keyboard_pane(app: &DesignApp) -> bool {
     app.pane == app.focus_pane
 }
 
-/// One input method event for the text caret: marked text previews in the story, a commit types.
 /// The text a key typed, given `text` as the window system reports it.
 ///
 /// On macOS the Space key in a Japanese or Chinese input mode types an ideographic space, but the
@@ -2553,6 +2552,7 @@ pub(crate) fn typed_text(text: &str, cjk_typing: bool, shift: bool, macos: bool)
     if macos && cjk_typing && !shift && text == " " { "\u{3000}" } else { text }
 }
 
+/// One input method event for the text caret: marked text previews in the story, a commit types.
 fn ime_event(app: &mut DesignApp, e: egui::ImeEvent, vi: designcraft_engine::ViewInfo) {
     let r = match e {
         egui::ImeEvent::Preedit { text, active_range_chars } => {
