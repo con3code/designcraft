@@ -206,24 +206,6 @@ mod tests {
     use crate::cjk::MojikumiTable;
 
     #[test]
-    fn consecutive_punctuation_touches_except_closing_before_opening() {
-        let styles = Styles::default();
-        for set in ["LineEndAllOneHalfEmEnum", "LineEndAllOneEmEnum", "SimpChineseDefault"] {
-            let rules = Rules::resolve(&styles, set).unwrap().unwrap();
-            let aki = |a: char, b: char| rules.pair(class(a), class(b)).desired;
-            for (a, b) in
-                [('」', '。'), ('」', '、'), ('。', '」'), ('、', '」'), ('」', '』'), ('）', '」'), ('，', '）'), ('「', '『'), ('（', '「')]
-            {
-                assert_eq!(aki(a, b), 0.0, "{set}: {a}{b}");
-            }
-            for (a, b) in [('」', '「'), ('。', '「'), ('、', '（'), ('」', '漢'), ('漢', '「')] {
-                assert_eq!(aki(a, b), 0.5, "{set}: {a}{b}");
-            }
-            assert_eq!(aki('」', '・'), 0.5, "{set}: the larger blank stays");
-        }
-    }
-
-    #[test]
     fn overrides_are_directional_and_unknown_tables_are_not_silently_applied() {
         let mut styles = Styles::default();
         styles.mojikumi_tables.push(MojikumiTable {
@@ -261,6 +243,24 @@ mod tests {
         assert_ne!(class('１'), class('1'));
         assert_ne!(class('，'), class('、'));
         assert_ne!(class('「'), class('（'));
+    }
+
+    #[test]
+    fn consecutive_punctuation_touches_except_closing_before_opening() {
+        let styles = Styles::default();
+        for set in ["LineEndAllOneHalfEmEnum", "LineEndAllOneEmEnum", "SimpChineseDefault"] {
+            let rules = Rules::resolve(&styles, set).unwrap().unwrap();
+            let aki = |a: char, b: char| rules.pair(class(a), class(b)).desired;
+            for (a, b) in
+                [('」', '。'), ('」', '、'), ('。', '」'), ('、', '」'), ('」', '』'), ('）', '」'), ('，', '）'), ('「', '『'), ('（', '「')]
+            {
+                assert_eq!(aki(a, b), 0.0, "{set}: {a}{b}");
+            }
+            for (a, b) in [('」', '「'), ('。', '「'), ('、', '（'), ('」', '漢'), ('漢', '「')] {
+                assert_eq!(aki(a, b), 0.5, "{set}: {a}{b}");
+            }
+            assert_eq!(aki('」', '・'), 0.5, "{set}: the larger blank stays");
+        }
     }
 
     #[test]
