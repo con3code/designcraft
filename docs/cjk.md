@@ -157,10 +157,11 @@ Jidori, tsume, aki before and after, em-box alignment and the other leading mode
 What is built (`doc::framegrid`, `compose::framegrid`, `engine::cmd::grids`): the grid of a frame
 (font, size, scales, character and line aki, line alignment override, grid and character
 alignment, count position and size, view, the cell shaded every n-th), `DocSettings.frame_grid`
-for new grids (Noto Serif CJK JP Regular for now, the same face on every platform; the face of
-the document's language, SC / TC / KR, is to come; else the first
-installed of Noto Serif JP, Source Han Serif JP, Hiragino Mincho ProN, Yu Mincho, MS Mincho,
-IPAexMincho). Character and line counts are not stored: they follow from the frame size.
+for new grids (its font, left at the default, is the serif face of the interface language: Noto
+Serif CJK JP / SC / TC / KR where installed, else the first installed Mincho, Song, Ming or
+Myeongjo the system ships, e.g. Hiragino Mincho ProN, Songti SC, PMingLiU, Batang; Japanese for
+other interface languages). Character and line counts are not stored: they follow from the frame
+size.
 Composition puts full-width characters of the grid's size one to a cell, a character pitch
 apart; Western text and other sizes keep their widths. A line takes as many rows as its em box
 needs and is placed in them by the grid alignment. Changing a grid's size keeps its counts and
