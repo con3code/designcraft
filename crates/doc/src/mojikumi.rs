@@ -137,15 +137,17 @@ impl<'a> Rules<'a> {
         }
         let punctuation = trailing(left).max(leading(right));
         if punctuation > 0.0 {
-            // A line is taken in at the quarter ems of middle dots first, then at the half ems of
-            // brackets and commas; the space after a full stop is not reduced (JLREQ 3.8.3).
-            let quarter = trailing(left).max(leading(right)) < 0.5;
+            // The Japanese sets take a line in at the quarter ems of middle dots first, then at the
+            // half ems of brackets and commas, and don't reduce the space after a full stop
+            // (JLREQ 3.8.3). The Chinese sets reduce all punctuation blanks together.
+            let japanese = self.base != Base::Chinese;
+            let quarter = punctuation < 0.5;
             let full_stop = matches!(left, 6 | 31);
             return Aki {
-                min: if full_stop { punctuation } else { 0.0 },
+                min: if japanese && full_stop { punctuation } else { 0.0 },
                 desired: punctuation,
                 max: punctuation,
-                priority: if quarter { 1 } else { 2 },
+                priority: if japanese && !quarter { 2 } else { 1 },
                 discrete: false,
             };
         }
@@ -334,6 +336,14 @@ mod tests {
             for b in ['漢', '「'] {
                 let a = aki('。', b);
                 assert_eq!((a.min, a.desired), (0.5, 0.5), "{set}: 。{b}");
+            }
+        }
+        // The Chinese sets are unchanged: every punctuation blank reduces together, to nothing.
+        for set in ["SimpChineseDefault", "TradChineseDefault"] {
+            let rules = Rules::resolve(&styles, set).unwrap().unwrap();
+            for (a, b) in [('漢', '・'), ('、', '漢'), ('」', '漢'), ('漢', '「'), ('。', '漢')] {
+                let aki = rules.pair(class(a), class(b));
+                assert_eq!((aki.min, aki.priority), (0.0, 1), "{set}: {a}{b}");
             }
         }
     }
