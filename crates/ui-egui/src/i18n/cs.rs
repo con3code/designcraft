@@ -1903,6 +1903,8 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ),
     ("{name}: {count} step(s) done", "{name}: hotovo kroků: {count}"),
     ("“{}” has changes that are not saved. Save them before closing?", "„{}“ obsahuje neuložené změny. Uložit je před zavřením?"),
+    ("Horizontal Grid Tool", "Nástroj Vodorovná mřížka"),
+    ("Vertical Grid Tool", "Nástroj Svislá mřížka"),
 ];
 
 /// Czech count captions: English noun → [one (1), few (2–4), other (0, 5 and more)].
