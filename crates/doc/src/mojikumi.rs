@@ -128,7 +128,17 @@ impl<'a> Rules<'a> {
         }
         let punctuation = trailing(left).max(leading(right));
         if punctuation > 0.0 {
-            return Aki { min: 0.0, desired: punctuation, max: punctuation, priority: 1, discrete: false };
+            // A line is taken in at the quarter ems of middle dots first, then at the half ems of
+            // brackets and commas; the space after a full stop is not reduced (JLREQ 3.8.3).
+            let quarter = trailing(left).max(leading(right)) < 0.5;
+            let full_stop = matches!(left, 6 | 31);
+            return Aki {
+                min: if full_stop { punctuation } else { 0.0 },
+                desired: punctuation,
+                max: punctuation,
+                priority: if quarter { 1 } else { 2 },
+                discrete: false,
+            };
         }
         let roman = |c| matches!(c, 18 | 25);
         let ideograph = |c| matches!(c, 3 | 7..=9 | 11 | 12 | 24 | 33);
@@ -271,6 +281,26 @@ mod tests {
         for (l, r) in [(12, 18), (22, class('（')), (class('。'), 22), (12, 12)] {
             let (a, b) = (missing.pair(l, r), nothing.pair(l, r));
             assert_eq!((a.min, a.desired, a.max, a.priority), (b.min, b.desired, b.max, b.priority), "{l}/{r}");
+        }
+    }
+
+    #[test]
+    fn middle_dots_reduce_first_and_a_full_stops_space_never() {
+        let styles = Styles::default();
+        for set in ["LineEndAllOneHalfEmEnum", "LineEndAllOneEmEnum"] {
+            let rules = Rules::resolve(&styles, set).unwrap().unwrap();
+            let aki = |a: char, b: char| rules.pair(class(a), class(b));
+            // Middle dots' quarter ems, then brackets' and commas' half ems, then wa-ō aki.
+            let (dot, after_dot, comma, close, open, wa_ou) =
+                (aki('漢', '・'), aki('・', '漢'), aki('、', '漢'), aki('」', '漢'), aki('漢', '「'), aki('漢', 'A'));
+            assert!(dot.priority == after_dot.priority && dot.priority < comma.priority, "{set}");
+            assert!(comma.priority == close.priority && close.priority == open.priority && open.priority < wa_ou.priority, "{set}");
+            assert_eq!((dot.min, comma.min, close.min, open.min), (0.0, 0.0, 0.0, 0.0), "{set}");
+            // After a full stop the half em stays, before an opening bracket too.
+            for b in ['漢', '「'] {
+                let a = aki('。', b);
+                assert_eq!((a.min, a.desired), (0.5, 0.5), "{set}: 。{b}");
+            }
         }
     }
 }
