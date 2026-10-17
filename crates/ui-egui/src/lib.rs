@@ -619,6 +619,9 @@ pub struct DesignApp {
     /// The marked text the system IME last sent (`None` once it commits or clears). When the
     /// composition ends some other way (a click, a tool switch), the IME is told to drop it.
     pub(crate) ime_marked: Option<String>,
+    /// The text typed last was Chinese, Japanese or Korean the input method committed (it is in
+    /// a CJK mode), not letters straight from the keys: see [`canvas::typed_text`].
+    pub(crate) ime_cjk_typing: bool,
     /// The system IME must drop its marked text (see [`Self::take_ime_discard`]).
     pub(crate) ime_discard: bool,
     /// The canvas asked for the system IME in the last frame (the web build's text input has the
@@ -696,6 +699,7 @@ impl DesignApp {
             in_control: false,
             object_clip_text: None,
             ime_marked: None,
+            ime_cjk_typing: false,
             ime_discard: false,
             canvas_ime: false,
             quit_requested: false,

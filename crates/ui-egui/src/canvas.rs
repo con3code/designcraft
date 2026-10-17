@@ -2461,7 +2461,13 @@ fn handle_input(app: &mut DesignApp, ui: &mut egui::Ui, resp: &egui::Response, r
             egui::Event::Ime(ime) if wants_text => ime_event(app, ime, vi),
             // Keys the IME passes through come as text only while nothing is marked.
             egui::Event::Text(t) if wants_text && !composing => {
-                let _ = app.run("text.insert", json!({"text": t}));
+                let shift = ui.input(|i| i.modifiers.shift);
+                let typed = typed_text(&t, app.ime_cjk_typing, shift, cfg!(target_os = "macos"));
+                // Letters straight from the keys: the input method is in its Roman mode.
+                if !t.trim().is_empty() {
+                    app.ime_cjk_typing = false;
+                }
+                let _ = app.run("text.insert", json!({"text": typed}));
             }
             // The IME owns the keyboard until it commits: no typing, clipboard or editing keys.
             egui::Event::Text(_) | egui::Event::Paste(_) | egui::Event::Copy | egui::Event::Cut | egui::Event::Key { .. } if composing => {}
@@ -2531,6 +2537,18 @@ fn keyboard_pane(app: &DesignApp) -> bool {
     app.pane == app.focus_pane
 }
 
+/// The text a key typed, given `text` as the window system reports it.
+///
+/// On macOS the Space key in a Japanese or Chinese input mode types an ideographic space, but the
+/// window layer drops what the input method inserts when nothing is being composed and reports
+/// the key's own character, a plain space. While the text before it was CJK text the input
+/// method committed (`cjk_typing`), a plain space is therefore the ideographic one; with Shift it
+/// is the plain space, as the input methods have it. Letters typed straight from the keys (the
+/// Roman mode) end that, and accents a Latin input method composes don't start it.
+pub(crate) fn typed_text(text: &str, cjk_typing: bool, shift: bool, macos: bool) -> &str {
+    if macos && cjk_typing && !shift && text == " " { "\u{3000}" } else { text }
+}
+
 /// One input method event for the text caret: marked text previews in the story, a commit types.
 fn ime_event(app: &mut DesignApp, e: egui::ImeEvent, vi: designcraft_engine::ViewInfo) {
     let r = match e {
@@ -2546,6 +2564,7 @@ fn ime_event(app: &mut DesignApp, e: egui::ImeEvent, vi: designcraft_engine::Vie
         }
         egui::ImeEvent::Commit(t) => {
             app.ime_marked = None;
+            app.ime_cjk_typing = t.chars().any(designcraft_compose::upright_in_vertical);
             app.session.tool_ime_commit(&t, vi).map_err(|e| e.to_string())
         }
         // The web text agent's corrections and mobile Backspace: characters around the caret go.
@@ -2977,6 +2996,19 @@ mod tests {
     use egui_kittest::{Harness, kittest::Queryable};
 
     use super::*;
+
+    /// The Space key after CJK text the input method committed is the ideographic space on
+    /// macOS (the window layer reports a plain one); Shift, the Roman mode and other systems keep
+    /// it.
+    #[test]
+    fn space_after_cjk_input_method_text_is_the_ideographic_space() {
+        assert_eq!(typed_text(" ", true, false, true), "\u{3000}");
+        assert_eq!(typed_text(" ", true, true, true), " ", "Shift+Space");
+        assert_eq!(typed_text(" ", false, false, true), " ", "Roman mode");
+        assert_eq!(typed_text(" ", true, false, false), " ", "other systems report what the input method typed");
+        assert_eq!(typed_text("a", true, false, true), "a");
+        assert_eq!(typed_text("  ", true, false, true), "  ");
+    }
 
     #[test]
     fn a_press_after_a_drag_is_not_a_double_click() {
@@ -4532,6 +4564,26 @@ mod tests {
 
     fn preedit(t: &str, c: usize) -> egui::Event {
         egui::Event::Ime(egui::ImeEvent::Preedit { text: t.into(), active_range_chars: Some(c..c) })
+    }
+
+    /// Space after Japanese the input method committed is the ideographic space on macOS, where
+    /// the window layer reports it as a plain one; after letters typed straight from the keys it
+    /// stays plain, and so does it after an accent a Latin input method composed.
+    #[test]
+    fn space_after_committed_cjk_text_types_an_ideographic_space() {
+        let mut app = DesignApp::new(designcraft_engine::Session::new(), crate::Services::default());
+        let ctx = egui::Context::default();
+        let sid = typing_app(&mut app, &ctx, "");
+        let space = if cfg!(target_os = "macos") { "\u{3000}" } else { " " };
+        ime_frame(&mut app, &ctx, vec![preedit("にほんご", 4), egui::Event::Ime(egui::ImeEvent::Commit("日本語".into()))]);
+        ime_frame(&mut app, &ctx, vec![egui::Event::Text(" ".into())]);
+        assert_eq!(story_text(&mut app, &sid), format!("日本語{space}"));
+        ime_frame(&mut app, &ctx, vec![egui::Event::Text("ab".into())]);
+        ime_frame(&mut app, &ctx, vec![egui::Event::Text(" ".into())]);
+        assert_eq!(story_text(&mut app, &sid), format!("日本語{space}ab "));
+        ime_frame(&mut app, &ctx, vec![preedit("´", 1), egui::Event::Ime(egui::ImeEvent::Commit("é".into()))]);
+        ime_frame(&mut app, &ctx, vec![egui::Event::Text(" ".into())]);
+        assert_eq!(story_text(&mut app, &sid), format!("日本語{space}ab é "));
     }
 
     #[test]
