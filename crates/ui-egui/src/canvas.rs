@@ -2636,7 +2636,6 @@ fn ime_output(app: &mut DesignApp, ctx: &egui::Context, xf: &Xf) {
     });
 }
 
-/// View → Show Hidden Characters: ¶ paragraph ends, » tabs, · spaces, ¬ forced line breaks, # end of story.
 /// Frame grids: their cells (or the N/Z view) and character counts, in the frame's layer colour
 /// (screen only).
 fn draw_frame_grids(app: &DesignApp, painter: &egui::Painter, xf: &Xf, doc: &Document, layout: &CanvasLayout) {
@@ -2729,6 +2728,7 @@ fn draw_frame_grids(app: &DesignApp, painter: &egui::Painter, xf: &Xf, doc: &Doc
     }
 }
 
+/// View → Show Hidden Characters: ¶ paragraph ends, » tabs, · spaces, ¬ forced line breaks, # end of story.
 fn draw_hidden_characters(app: &DesignApp, painter: &egui::Painter, xf: &Xf, doc: &Document, layout: &CanvasLayout) {
     for story in doc.stories.values() {
         let cs = app.session.cache.get(doc, story.id, None);
