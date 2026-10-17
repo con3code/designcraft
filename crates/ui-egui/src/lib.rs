@@ -1132,6 +1132,10 @@ impl DesignApp {
             self.egui_ctx = Some(ctx.clone());
         }
         self.window_maximized = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
+        // Engine defaults that follow the interface language (the grid font of new frame grids).
+        if self.session.prefs.interface_language != self.ui.language {
+            self.session.prefs.interface_language.clone_from(&self.ui.language);
+        }
         if !self.color_applied {
             self.color_applied = true;
             if let Some(cs) = self.ui.color_settings.clone() {

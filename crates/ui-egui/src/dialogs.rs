@@ -2014,7 +2014,21 @@ pub fn open_frame_grid_options(app: &mut DesignApp) {
     let (grid, chars, lines, columns, gutter) = match &g0 {
         Some(g) => (g["grid"].clone(), g["chars"].clone(), g["lines"].clone(), g["columns"].clone(), g["gutter"].clone()),
         None => {
-            let defaults = app.session.active().map(|d| json!(d.doc.settings.frame_grid)).unwrap_or(json!({}));
+            // The grid a new frame grid gets: the default grid font as the interface language's.
+            let defaults = app
+                .session
+                .active()
+                .map(|d| {
+                    let mut g = d.doc.settings.frame_grid.clone();
+                    if g.font_family == designcraft_doc::framegrid::DEFAULT_GRID_FONT.0 {
+                        let db = designcraft_fonts::FontDb::global();
+                        let (family, style) = designcraft_doc::framegrid::grid_font_for(&app.ui.language, |f| db.has_family(f));
+                        g.font_family = family.into();
+                        g.font_style = style.into();
+                    }
+                    json!(g)
+                })
+                .unwrap_or(json!({}));
             (defaults, json!(""), json!(""), json!(1), json!(12.0))
         }
     };

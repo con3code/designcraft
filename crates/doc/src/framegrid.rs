@@ -130,13 +130,12 @@ pub struct FrameGrid {
 
 /// The grid font new documents give their frame grids: a serif (Mincho / Song / Myeongjo) face
 /// that is the same on macOS, Windows and Linux, so a document's grids look alike wherever it is
-/// opened. It is the Japanese face of a pan-CJK family for now: choosing the face of the
-/// document's language (SC, TC, KR) is to come.
+/// opened. Left as it is, it stands for the serif face of the CJK language the grids are made in
+/// (see [`grid_font_for`]): Japanese is its own.
 pub const DEFAULT_GRID_FONT: (&str, &str) = ("Noto Serif CJK JP", "Regular");
 
-/// Mincho faces that stand in for [`DEFAULT_GRID_FONT`] where it isn't installed: (family,
-/// style), in order of preference. The same design under its other names first, then the Mincho
-/// each system ships.
+/// Japanese Mincho faces for frame grids: (family, style), in order of preference. The default
+/// design under its other names first, then the Mincho each system ships.
 pub const GRID_FONT_FALLBACKS: &[(&str, &str)] = &[
     ("Noto Serif CJK JP", "Regular"),
     ("Noto Serif JP", "Regular"),
@@ -147,6 +146,67 @@ pub const GRID_FONT_FALLBACKS: &[(&str, &str)] = &[
     ("MS Mincho", "Regular"),
     ("IPAexMincho", "Regular"),
 ];
+
+/// Simplified Chinese Song (Songti) faces, as [`GRID_FONT_FALLBACKS`].
+pub const GRID_FONTS_SC: &[(&str, &str)] = &[
+    ("Noto Serif CJK SC", "Regular"),
+    ("Noto Serif SC", "Regular"),
+    ("Source Han Serif SC", "Regular"),
+    ("Songti SC", "Regular"),
+    ("STSong", "Regular"),
+    ("SimSun", "Regular"),
+    ("NSimSun", "Regular"),
+    ("AR PL UMing CN", "Light"),
+];
+
+/// Traditional Chinese Ming faces, as [`GRID_FONT_FALLBACKS`].
+pub const GRID_FONTS_TC: &[(&str, &str)] = &[
+    ("Noto Serif CJK TC", "Regular"),
+    ("Noto Serif TC", "Regular"),
+    ("Source Han Serif TC", "Regular"),
+    ("Songti TC", "Regular"),
+    ("LiSong Pro", "Light"),
+    ("PMingLiU", "Regular"),
+    ("MingLiU", "Regular"),
+    ("AR PL UMing TW", "Light"),
+];
+
+/// Korean Myeongjo (Batang) faces, as [`GRID_FONT_FALLBACKS`].
+pub const GRID_FONTS_KR: &[(&str, &str)] = &[
+    ("Noto Serif CJK KR", "Regular"),
+    ("Noto Serif KR", "Regular"),
+    ("Source Han Serif K", "Regular"),
+    ("AppleMyungjo", "Regular"),
+    ("Batang", "Regular"),
+    ("NanumMyeongjo", "Regular"),
+    ("UnBatang", "Regular"),
+];
+
+/// The serif faces for frame grids made in `language` (a BCP 47 tag or an interface language
+/// code: `zh`, `zh-Hans`, `zh-Hant`, `zh-TW`, `ko`…). Japanese, and any language that isn't
+/// Chinese or Korean, takes the Japanese Mincho faces.
+pub fn grid_fonts(language: &str) -> &'static [(&'static str, &'static str)] {
+    let l = language.to_ascii_lowercase().replace('_', "-");
+    let mut parts = l.split('-');
+    match parts.next() {
+        Some("zh") => {
+            if parts.any(|p| matches!(p, "hant" | "tw" | "hk" | "mo")) {
+                GRID_FONTS_TC
+            } else {
+                GRID_FONTS_SC
+            }
+        }
+        Some("ko") => GRID_FONTS_KR,
+        _ => GRID_FONT_FALLBACKS,
+    }
+}
+
+/// The face a frame grid made in `language` gets when its font is [`DEFAULT_GRID_FONT`]: the first
+/// of [`grid_fonts`] that is `installed`, else the first of them (shown as a missing font).
+pub fn grid_font_for(language: &str, installed: impl Fn(&str) -> bool) -> (&'static str, &'static str) {
+    let fonts = grid_fonts(language);
+    fonts.iter().find(|(family, _)| installed(family)).or(fonts.first()).copied().unwrap_or(DEFAULT_GRID_FONT)
+}
 
 impl Default for FrameGrid {
     fn default() -> Self {
@@ -327,5 +387,34 @@ mod tests {
         let (c, l) = FrameGrid::default().counts(1e300, f64::NAN, false);
         assert_eq!((c, l), (MAX_GRID_COUNT, 0));
         assert!(FrameGrid::default().cells(Rect::new(0.0, 0.0, 1e9, 1e9), false, 100).len() <= 100);
+    }
+
+    /// Grids made in Chinese or Korean get a Song / Ming / Myeongjo face of that language,
+    /// installed ones first; everything else gets the Japanese Mincho.
+    #[test]
+    fn grid_fonts_follow_the_cjk_language() {
+        let none = |_: &str| false;
+        assert_eq!(grid_font_for("ja", none), DEFAULT_GRID_FONT);
+        assert_eq!(grid_font_for("en", none), DEFAULT_GRID_FONT);
+        assert_eq!(grid_font_for("", none), DEFAULT_GRID_FONT);
+        for (lang, family) in [
+            ("zh", "Noto Serif CJK SC"),
+            ("zh-Hans", "Noto Serif CJK SC"),
+            ("zh-CN", "Noto Serif CJK SC"),
+            ("zh-hant", "Noto Serif CJK TC"),
+            ("zh-TW", "Noto Serif CJK TC"),
+            ("zh_HK", "Noto Serif CJK TC"),
+            ("ko", "Noto Serif CJK KR"),
+            ("ko-KR", "Noto Serif CJK KR"),
+        ] {
+            assert_eq!(grid_font_for(lang, none).0, family, "{lang}");
+        }
+        // The first installed face of the language wins.
+        assert_eq!(grid_font_for("zh", |f| f == "SimSun" || f == "Songti SC"), ("Songti SC", "Regular"));
+        assert_eq!(grid_font_for("zh-hant", |f| f == "PMingLiU"), ("PMingLiU", "Regular"));
+        assert_eq!(grid_font_for("ko", |f| f == "Batang"), ("Batang", "Regular"));
+        assert_eq!(grid_font_for("ja", |f| f == "Hiragino Mincho ProN"), ("Hiragino Mincho ProN", "W3"));
+        // A Japanese face installed doesn't serve a Chinese grid.
+        assert_eq!(grid_font_for("zh", |f| f == "Hiragino Mincho ProN").0, "Noto Serif CJK SC");
     }
 }
