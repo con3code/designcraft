@@ -127,13 +127,21 @@ impl<'a> Rules<'a> {
             return Aki::fixed(if self.base == Base::LineEndHalfEm { 0.0 } else { trailing(left) });
         }
         // Consecutive punctuation in the Japanese sets (JLREQ 3.1.4): opening brackets together,
-        // and closing brackets, commas and full stops together, touch. Other neighbours keep the
-        // larger blank, so a closing bracket and an opening one are half an em apart. The Chinese
-        // sets keep the larger blank throughout.
+        // and closing brackets, commas and full stops together, touch. A middle dot (・：；) after
+        // a closing bracket or before an opening one keeps only its own quarter em. Other
+        // neighbours keep the larger blank, so a closing bracket and an opening one are half an
+        // em apart. The Chinese sets keep the larger blank throughout.
         let opening = |c| matches!(c, 1 | 26 | 27);
         let closing = |c| matches!(c, 2 | 6 | 21 | 28..=31);
-        if self.base != Base::Chinese && ((opening(left) && opening(right)) || (closing(left) && closing(right))) {
-            return Aki::default();
+        let closing_bracket = |c| matches!(c, 2 | 28 | 29);
+        let middle_dot = |c| matches!(c, 5 | 32);
+        if self.base != Base::Chinese {
+            if (opening(left) && opening(right)) || (closing(left) && closing(right)) {
+                return Aki::default();
+            }
+            if (closing_bracket(left) && middle_dot(right)) || (middle_dot(left) && opening(right)) {
+                return Aki { min: 0.0, desired: 0.25, max: 0.25, priority: 1, discrete: false };
+            }
         }
         let punctuation = trailing(left).max(leading(right));
         if punctuation > 0.0 {
@@ -260,12 +268,17 @@ mod tests {
             for (a, b) in [('」', '「'), ('。', '「'), ('、', '（'), ('」', '漢'), ('漢', '「')] {
                 assert_eq!(aki(a, b), 0.5, "{set}: {a}{b}");
             }
-            assert_eq!(aki('」', '・'), 0.5, "{set}: the larger blank stays");
+            // A middle dot keeps its quarter em beside a bracket (JLREQ 3.1.4, Figure 69 ⑦).
+            for (a, b) in [('」', '・'), ('）', '：'), ('』', '；'), ('・', '「'), ('；', '（'), ('：', '〈')] {
+                assert_eq!(aki(a, b), 0.25, "{set}: {a}{b}");
+            }
+            // After a comma or full stop the larger blank stays.
+            assert_eq!(aki('、', '・'), 0.5, "{set}: 、・");
         }
         // The Chinese sets are unchanged: the larger blank stays between any two marks.
         for set in ["SimpChineseDefault", "TradChineseDefault"] {
             let rules = Rules::resolve(&styles, set).unwrap().unwrap();
-            for (a, b) in [('」', '。'), ('，', '）'), ('「', '『'), ('」', '「')] {
+            for (a, b) in [('」', '。'), ('，', '）'), ('「', '『'), ('」', '「'), ('」', '・'), ('・', '「')] {
                 assert_eq!(rules.pair(class(a), class(b)).desired, 0.5, "{set}: {a}{b}");
             }
         }
