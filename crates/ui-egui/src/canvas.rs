@@ -2631,8 +2631,16 @@ fn ime_output(app: &mut DesignApp, ctx: &egui::Context, xf: &Xf) {
     let Some((a, b)) = caret else {
         // The IME goes away with its marked text: keep that text as typed, like a click away.
         keep_marked_text(app);
+        app.ime_japanese_typing = false;
+        app.ime_caret_story = None;
         return;
     };
+    // In another story (or document) the input mode may have changed unseen: start plain.
+    let here = app.session.active_index().zip(app.session.active().and_then(|st| st.selection.text).map(|t| t.story));
+    if here != app.ime_caret_story {
+        app.ime_japanese_typing = false;
+        app.ime_caret_story = here;
+    }
     let r = Rect::from_two_pos(xf.to_screen(a), xf.to_screen(b)).expand(1.0);
     // The composition ended outside the IME (a click, a command): the IME drops what it has marked.
     let interrupt = app.ime_marked.is_some() && !app.session.tool_composing();
@@ -4689,6 +4697,31 @@ mod tests {
         ime_frame(&mut app, &ctx, vec![preedit("´", 1), egui::Event::Ime(egui::ImeEvent::Commit("é".into()))]);
         ime_frame(&mut app, &ctx, vec![egui::Event::Text(" ".into())]);
         assert_eq!(story_text(&mut app, &sid), format!("日本語{space}ab é "));
+    }
+
+    /// The caret moving to another story, or leaving the text, ends Japanese typing: the input
+    /// mode may have changed without an event the app sees (the Eisu key, say).
+    #[test]
+    fn japanese_typing_ends_with_the_story_or_the_text_caret() {
+        let mut app = DesignApp::new(designcraft_engine::Session::new(), crate::Services::default());
+        let ctx = egui::Context::default();
+        let first = typing_app(&mut app, &ctx, "");
+        let commit = |app: &mut DesignApp| {
+            ime_frame(app, &ctx, vec![preedit("にほんご", 4), egui::Event::Ime(egui::ImeEvent::Commit("日本語".into()))]);
+            assert!(app.ime_japanese_typing);
+        };
+        commit(&mut app);
+        let f = app.session.execute("frame.create", &json!({"rect": [36, 260, 300, 400], "content": "text", "text": ""})).unwrap();
+        let second = f["story"].clone();
+        app.session.execute("text.select", &json!({"story": second, "anchor": 0, "focus": 0})).unwrap();
+        ime_frame(&mut app, &ctx, vec![]);
+        ime_frame(&mut app, &ctx, vec![egui::Event::Text(" ".into())]);
+        assert_eq!(story_text(&mut app, &second), " ");
+        assert_eq!(story_text(&mut app, &first), "日本語");
+        commit(&mut app);
+        app.select_tool("rectangleFrame");
+        ime_frame(&mut app, &ctx, vec![]);
+        assert!(!app.ime_japanese_typing);
     }
 
     /// Chinese and Korean input methods type plain spaces (Korean separates words with them), so

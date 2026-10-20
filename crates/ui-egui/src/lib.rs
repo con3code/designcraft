@@ -632,6 +632,9 @@ pub struct DesignApp {
     pub(crate) ime_japanese_typing: bool,
     /// The composition under way has shown kana: the input method is a Japanese one.
     pub(crate) ime_kana_seen: bool,
+    /// The document and story the text caret was in last frame. Moving to another one, or leaving
+    /// the text, ends `ime_japanese_typing`.
+    pub(crate) ime_caret_story: Option<(usize, designcraft_doc::StoryId)>,
     /// The system IME must drop its marked text (see [`Self::take_ime_discard`]).
     pub(crate) ime_discard: bool,
     /// The canvas asked for the system IME in the last frame (the web build's text input has the
@@ -711,6 +714,7 @@ impl DesignApp {
             ime_marked: None,
             ime_japanese_typing: false,
             ime_kana_seen: false,
+            ime_caret_story: None,
             ime_discard: false,
             canvas_ime: false,
             quit_requested: false,
