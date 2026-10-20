@@ -302,11 +302,11 @@ mod tests {
             assert!(comma.priority == close.priority && close.priority == open.priority && open.priority < wa_ou.priority, "{set}");
             assert_eq!((dot.min, comma.min, close.min, open.min), (0.0, 0.0, 0.0, 0.0), "{set}");
             // The tier follows the class: ：；！？ share the middle dots' tier, and a bracket's half
-            // em beside a middle dot stays with the brackets.
+            // em beside one of them stays with the brackets.
             for (a, b) in [('漢', '：'), ('；', '漢'), ('漢', '！'), ('？', '漢')] {
                 assert_eq!(aki(a, b).priority, dot.priority, "{set}: {a}{b}");
             }
-            assert_eq!(aki('・', '「').priority, open.priority, "{set}: ・「");
+            assert_eq!(aki('！', '「').priority, open.priority, "{set}: ！「");
             // After a full stop the half em stays, before an opening bracket too.
             for b in ['漢', '「'] {
                 let a = aki('。', b);
