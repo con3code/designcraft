@@ -5492,7 +5492,7 @@ impl CharFields<'_> {
 /// A number attribute shown multiplied by `scale` (100 for a fraction shown as a percentage).
 fn char_number(ui: &mut egui::Ui, d: &mut Dialog, cf: &CharFields, key: &str, suffix: &str, scale: f64, range: (f64, f64)) {
     let v = cf.get(d, key).as_f64().map(|x| x * scale);
-    let field = crate::widgets::NumField::number(key, v, suffix, 2).width(80.0).range(range.0, range.1);
+    let field = crate::widgets::NumField::with_suffix(key, v, suffix, 2).width(80.0).range(range.0, range.1);
     let edit = if cf.sparse { field.show_or_clear(ui) } else { field.show(ui).map(Some) };
     if let Some(n) = edit {
         cf.set(d, key, n.map_or(Value::Null, |n| json!(n / scale)));
@@ -5596,7 +5596,7 @@ fn basic_character_formats(app: &mut DesignApp, ui: &mut egui::Ui, d: &mut Dialo
             v if v["kind"] == "points" => v["value"].as_f64(),
             _ => None,
         };
-        let field = crate::widgets::NumField::number("pslead", lv, " pt", 2).width(80.0).range(0.0, 5000.0);
+        let field = crate::widgets::NumField::points("pslead", lv, 2).width(80.0).range(0.0, 5000.0);
         let edit = if cf.sparse { field.show_or_clear(ui) } else { field.show(ui).map(Some) };
         if let Some(n) = edit {
             cf.set(d, "leading", n.map_or(Value::Null, |n| json!({"kind": "points", "value": n})));

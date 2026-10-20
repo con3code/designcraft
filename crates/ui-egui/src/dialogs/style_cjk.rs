@@ -120,7 +120,7 @@ fn grid(id: &str) -> egui::Grid {
 /// emptying the field makes it automatic again.
 fn char_auto_number(ui: &mut egui::Ui, d: &mut Dialog, cf: &CharFields, key: &str, suffix: &str, scale: f64, range: (f64, f64)) {
     let v = cf.get(d, key).as_f64().map(|x| x * scale);
-    let field = crate::widgets::NumField::number(key, v, suffix, 2).width(80.0).range(range.0, range.1);
+    let field = crate::widgets::NumField::with_suffix(key, v, suffix, 2).width(80.0).range(range.0, range.1);
     if let Some(n) = field.show_or_clear(ui) {
         cf.set(d, key, n.map_or(Value::Null, |n| json!(n / scale)));
     }
