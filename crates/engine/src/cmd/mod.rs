@@ -21,7 +21,7 @@ pub use find::same_find_domain;
 pub(crate) mod flex;
 mod fonts;
 mod grids;
-mod guides;
+pub(crate) mod guides;
 mod index;
 mod inspect;
 mod interactive;
