@@ -2162,12 +2162,21 @@ pub fn default_shortcut(id: &str) -> Option<&'static str> {
     designcraft_engine::find_command(id).and_then(|c| c.shortcut).or_else(|| ui_label(id).and_then(|(_, s)| s))
 }
 
+/// Default shortcuts that change hands with [`crate::cjk_features`], as in the CJK editions of
+/// InDesign: (CJK command, command that gives up its keys). With CJK features, ⌥⌘E applies the
+/// grid format and Fit Content to Frame has no shortcut; without them it's the other way round.
+const CJK_SHORTCUT_SWAPS: &[(&str, &str)] = &[("type.applyGridFormat", "fit.contentToFrame")];
+
 /// The shortcut in effect for a command (the user's, else the default).
 pub fn shortcut_of(app: &DesignApp, id: &str) -> Option<String> {
     match app.ui.shortcuts.get(id) {
         Some(s) if s.is_empty() => None,
         Some(s) => Some(s.clone()),
-        None => default_shortcut(id).map(str::to_string),
+        None => {
+            let cjk = crate::cjk_features(app);
+            let given_up = CJK_SHORTCUT_SWAPS.iter().any(|(c, other)| if cjk { *other == id } else { *c == id });
+            if given_up { None } else { default_shortcut(id).map(str::to_string) }
+        }
     }
 }
 
@@ -4491,6 +4500,11 @@ mod tests {
             assert_eq!(tool_shown(&app, "horizontalGrid") && tool_shown(&app, "verticalGrid"), on, "{lang}");
             assert!(tool_shown(&app, "verticalType"), "the vertical type tool is in every edition");
             assert_eq!(press_y(&mut app) == "horizontalGrid", on, "{lang}: Y");
+            // ⌥⌘E: Apply Grid Format with CJK features, else Fit Content to Frame; never both.
+            let keys = |id| shortcut_of(&app, id);
+            assert_eq!(keys("type.applyGridFormat").as_deref(), on.then_some("Cmd+Alt+E"), "{lang}");
+            assert_eq!(keys("fit.contentToFrame").as_deref(), (!on).then_some("Cmd+Alt+E"), "{lang}");
+            assert_eq!(effective_shortcuts(&app).iter().filter(|(_, s)| s == "Cmd+Alt+E").count(), 1, "{lang}");
         }
         app.ui.language = String::new();
         app.run("prefs.set", json!({"cjkFeatures": true})).unwrap();
