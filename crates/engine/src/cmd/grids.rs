@@ -90,12 +90,23 @@ pub(crate) fn grid_with(base: &FrameGrid, p: &Value, id: &str) -> Result<FrameGr
     if let (Some(o), Some(m)) = (v.as_object_mut(), p.as_object()) {
         for k in GRID_KEYS {
             if let Some(x) = m.get(k) {
-                o.insert(k.into(), x.clone());
+                o.insert(k.into(), if k == "fillEvery" { fill_every_param(x) } else { x.clone() });
             }
         }
     }
     let g: FrameGrid = serde_json::from_value(v).map_err(|e| bad(id, e.to_string()))?;
     Ok(g.sanitized())
+}
+
+/// A shaded cell count sent as a float (`5.0`, as the panel and dialog send numbers) as a whole
+/// number, capped; anything else is left for the `u32` field to accept or reject.
+fn fill_every_param(x: &Value) -> Value {
+    match x.as_f64() {
+        Some(v) if x.is_f64() && v.is_finite() && v >= 0.0 => {
+            json!(v.round().min(f64::from(designcraft_doc::framegrid::MAX_GRID_COUNT)) as u32)
+        }
+        _ => x.clone(),
+    }
 }
 
 /// `g` for a new frame grid made in `language` (the interface language): the default grid font,
@@ -241,7 +252,8 @@ fn frame_grid_options(s: &mut Session, p: &Value) -> Result<Value> {
             let old = had.as_deref().cloned().unwrap_or_else(|| with_installed_font(d.settings.frame_grid.clone(), &language));
             let g = grid_with(&old, &p, ID)?;
             let (c0, l0) = counts(d, it, if had.is_some() { &old } else { &g });
-            let columns = p.get("columns").and_then(Value::as_u64).map_or(tf.options.columns, |v| v.clamp(1, 40) as u32);
+            let columns =
+                p.get("columns").and_then(Value::as_f64).filter(|v| v.is_finite()).map_or(tf.options.columns, |v| v.round().clamp(1.0, 40.0) as u32);
             let gutter = p.get("gutter").and_then(Value::as_f64).filter(|v| v.is_finite()).map_or(tf.options.gutter, |v| v.max(0.0));
             let chars = count_param(&p, "chars").unwrap_or(c0.max(1));
             let lines = count_param(&p, "lines").unwrap_or(l0.max(1));
@@ -542,6 +554,25 @@ mod tests {
         assert_eq!(grid_of(&s, id).fill_every, designcraft_doc::framegrid::MAX_GRID_COUNT);
         assert!(s.execute("object.frameGridOptions", &json!({"ids": [id], "fillEvery": -1})).is_err());
         assert!(s.execute("object.frameGridOptions", &json!({"ids": [id], "fillEvery": "ten"})).is_err());
+    }
+
+    #[test]
+    fn counts_sent_as_floats_are_read() {
+        // The panel and the dialog send counts as JSON floats (`2.0`).
+        let mut s = session();
+        let r = s.execute("frame.create", &json!({"rect": [36, 36, 300, 300], "content": "text", "caret": false})).unwrap();
+        let id = r["id"].as_u64().unwrap();
+        s.execute("object.frameType", &json!({"ids": [id], "type": "grid"})).unwrap();
+        let out = s.execute("object.frameGridOptions", &json!({"ids": [id], "columns": 2.0, "fillEvery": 5.0})).unwrap();
+        assert_eq!(out["grids"][0]["columns"], 2);
+        assert_eq!(grid_of(&s, id).fill_every, 5);
+        s.execute("object.frameGridOptions", &json!({"ids": [id], "columns": 99.6, "fillEvery": 4e9})).unwrap();
+        let d = &s.active().unwrap().doc;
+        let columns = d.item(designcraft_doc::ItemId(id)).and_then(|i| i.text_frame()).unwrap().options.columns;
+        assert_eq!((columns, grid_of(&s, id).fill_every), (40, designcraft_doc::framegrid::MAX_GRID_COUNT));
+        assert!(s.execute("object.frameGridOptions", &json!({"ids": [id], "fillEvery": -1.0})).is_err());
+        s.execute("object.frameGridOptions", &json!({"ids": [id], "fillEvery": 2.4})).unwrap();
+        assert_eq!(grid_of(&s, id).fill_every, 2);
     }
 
     #[test]

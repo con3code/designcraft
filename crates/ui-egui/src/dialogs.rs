@@ -2178,11 +2178,11 @@ fn frame_grid_params(d: &Dialog) -> Value {
     }
     for k in ["chars", "lines", "columns"] {
         if let Some(v) = d.n(k).filter(|v| v.is_finite() && *v >= 1.0) {
-            p.insert(k.into(), json!(v.round()));
+            p.insert(k.into(), json!(v.round() as u64));
         }
     }
     if let Some(v) = d.n("fillEvery").filter(|v| v.is_finite() && *v >= 0.0) {
-        p.insert("fillEvery".into(), json!(v.round().min(f64::from(designcraft_doc::framegrid::MAX_GRID_COUNT))));
+        p.insert("fillEvery".into(), json!(v.round().min(f64::from(designcraft_doc::framegrid::MAX_GRID_COUNT)) as u32));
     }
     Value::Object(p)
 }
