@@ -303,6 +303,7 @@ pub struct UiState {
     pub align_to: String,
     /// Properties > Text Style tab: 0 = Paragraph Styles, 1 = Character Styles.
     pub text_style_tab: u8,
+    /// View › Grids & Guides › Lock Guides: ruler guides can't be dragged.
     pub guides_locked: bool,
     pub smart_guides: bool,
     #[serde(default = "default_true")]
@@ -465,6 +466,7 @@ impl UiState {
             smart_dimensions: self.smart_dimensions,
             smart_spacing: self.smart_spacing,
             zone_px: self.snap_zone,
+            guides_locked: self.guides_locked,
         }
     }
 }
@@ -745,7 +747,9 @@ impl DesignApp {
         ViewInfo {
             zoom: self.view().map(|v| v.zoom).unwrap_or(1.0),
             snap: self.ui.snap_view(),
-            unit: self.ui.units,
+            // Tool readouts (sizes, smart-guide distances) measure in the document's ruler units,
+            // as its Control and Properties fields do.
+            unit: self.session.active().map_or(self.ui.units, |st| st.doc.settings.horizontal_units),
             stroke_in_front: self.ui.stroke_front,
         }
     }
@@ -842,7 +846,7 @@ impl DesignApp {
             }
         }
         if r.is_ok()
-            && matches!(id, "font.replace" | "edit.undo" | "edit.redo")
+            && matches!(id, "font.replace" | "font.reload" | "edit.undo" | "edit.redo")
             && let Some(dialog) = self.ui.dialog.as_mut().filter(|d| d.id == "findFont")
         {
             dialog.fields.remove("_fonts");
@@ -1853,6 +1857,17 @@ mod tests {
         assert!(saved.rich_black);
         let accurate: UiState = serde_json::from_str(r#"{"richBlack": false}"#).unwrap();
         assert!(!accurate.rich_black, "a saved choice is kept");
+    }
+
+    /// Tool readouts measured in picas whatever the document's units (the UI's unit is never set):
+    /// they follow the active document's ruler units.
+    #[test]
+    fn tool_readouts_measure_in_the_documents_units() {
+        let mut app = DesignApp::new(designcraft_engine::Session::new(), Services::default());
+        assert_eq!(app.view_info().unit, Unit::Picas, "no document: the UI's default");
+        app.run("file.new", json!({})).unwrap();
+        app.run("document.preferences", json!({"horizontalUnits": "inches", "verticalUnits": "millimeters"})).unwrap();
+        assert_eq!(app.view_info().unit, Unit::Inches);
     }
 
     /// An app with one document that has an unsaved edit.
