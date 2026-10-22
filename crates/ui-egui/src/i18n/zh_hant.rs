@@ -2377,3 +2377,7 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ("N/Z View", "N/Z 檢視"),
     ("Outline", "僅外框"),
 ];
+
+/// Captions that read differently by context (see `tr_context`). Table columns are already 欄
+/// (rows are 列), so they need no entry.
+pub(super) const CONTEXT: &[(&str, &str, &str)] = &[("Number:", "count", "數量："), ("Name", "contributors", "姓名")];

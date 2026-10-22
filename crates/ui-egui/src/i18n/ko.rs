@@ -2410,3 +2410,7 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ("N/Z View", "N/Z 보기"),
     ("Outline", "윤곽선만"),
 ];
+
+/// Captions that read differently by context (see `tr_context`): a table's or a grid's columns
+/// are 열, a text frame's are 단.
+pub(super) const CONTEXT: &[(&str, &str, &str)] = &[("Columns", "table", "열"), ("Columns:", "grid", "열 수:"), ("Number:", "count", "개수:")];
