@@ -4545,6 +4545,8 @@ pub fn tr_context<'a>(lang: &str, s: &'a str, context: &str) -> &'a str {
         "pl" => pl::CONTEXT,
         "ja" => ja::CONTEXT,
         "ar" => ar::CONTEXT,
+        "zh-hant" => zh_hant::CONTEXT,
+        "ko" => ko::CONTEXT,
         _ => &[],
     };
     if let Some((_, _, text)) = contexts.iter().find(|(key, scope, _)| *key == s && *scope == context) {
@@ -4753,10 +4755,17 @@ mod tests {
             ("ar", "العدد:", "الرقم:"),
             ("fr", "Nombre :", "Numéro:"),
             ("zh", "数量：", "编号："),
+            ("zh-hant", "數量：", "編號："),
+            ("ko", "개수:", "번호:"),
         ] {
             assert_eq!((tr_context(lang, "Number:", "count"), tr(lang, "Number:")), (count, numeral), "{lang}");
         }
         assert_eq!(tr_context("en", "Number:", "count"), "Number:");
+        // Korean table and grid columns are 열; a text frame's stay 단.
+        assert_eq!((tr_context("ko", "Columns", "table"), tr("ko", "Columns")), ("열", "단"));
+        assert_eq!((tr_context("ko", "Columns:", "grid"), tr("ko", "Columns:")), ("열 수:", "단 수:"));
+        assert_eq!(tr_context("zh-hant", "Columns", "table"), "欄");
+        assert_eq!((tr_context("zh-hant", "Name", "contributors"), tr("zh-hant", "Name")), ("姓名", "名稱"));
         assert_eq!(tr("de", "Gutter:"), "Spaltenabstand:");
         // The Pages panel menu.
         for key in [
