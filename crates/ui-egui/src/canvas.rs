@@ -2772,6 +2772,11 @@ fn draw_frame_grids(app: &DesignApp, painter: &egui::Painter, xf: &Xf, doc: &Doc
             let Some(g) = tf.options.frame_grid.as_ref().map(|g| g.sanitized()) else { continue };
             let vertical = doc.frame_vertical(it);
             let m = a * doc.text_xf(it);
+            // Frames off screen make no cells (layout slots hold every spread).
+            let screen = xf.rect(a.transform_rect_bbox(it.xf.transform_rect_bbox(it.inner_bounds())));
+            if !screen.intersects(painter.clip_rect()) {
+                continue;
+            }
             let col = layer_color(doc, it).gamma_multiply(0.55);
             let stroke = Stroke::new(hair(painter), col);
             let area = it.text_area();
@@ -2824,7 +2829,7 @@ fn draw_frame_grids(app: &DesignApp, painter: &egui::Painter, xf: &Xf, doc: &Doc
                 let shown = cs.frame(it.id).map_or(0, |f| f.lines.iter().flat_map(|l| &l.glyphs).filter(|g| g.visible && g.len > 0).count());
                 let cells = u64::from(chars) * u64::from(lines) * u64::from(tf.options.columns.max(1));
                 let label = format!("{chars}W × {lines}L = {cells} ({shown})");
-                let b = xf.rect(a.transform_rect_bbox(it.xf.transform_rect_bbox(it.inner_bounds())));
+                let b = screen;
                 let size = ((g.count_size * xf.zoom) as f32).clamp(7.0, 18.0);
                 let font = egui::FontId::proportional(size);
                 let (pos, align) = match g.count {

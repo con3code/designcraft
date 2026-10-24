@@ -859,7 +859,7 @@ fn compose_with_db(doc: &Document, story: &Story, frames: &[FrameSpec], opts: &C
         last_reference: 0.0,
         aki_below: None,
         pending: 0.0,
-        frame_grid_next: 0.0,
+        frame_grid_next: None,
         pi: 0,
         band: Band::default(),
         limits: Rc::default(),
@@ -1634,7 +1634,10 @@ fn compose_with_db(doc: &Document, story: &Story, frames: &[FrameSpec], opts: &C
                     // Frame grid: the line takes whole rows (the first at or after the end of the
                     // previous line's rows).
                     if let Some(g) = &f.frame_grid {
-                        let from = if cur.last_baseline.is_some() { cur.frame_grid_next + cur.pending } else { col.y0 };
+                        let from = match cur.last_baseline {
+                            Some(lb) => cur.frame_grid_next.filter(|(b, _)| *b == lb).map_or(lb + cur.last_descent, |(_, y)| y) + cur.pending,
+                            None => col.y0,
+                        };
                         let r = grid_line(g, f.vertical, col, from, line_glyphs, base_size);
                         baseline = r.baseline;
                         grid_rows = Some(r);
@@ -1958,7 +1961,7 @@ fn compose_with_db(doc: &Document, story: &Story, frames: &[FrameSpec], opts: &C
                 cur.pending = 0.0;
                 cur.grid_next = grid_end.map(|end| (baseline, end));
                 if let Some(r) = &grid_rows {
-                    cur.frame_grid_next = r.next;
+                    cur.frame_grid_next = Some((baseline, r.next));
                 }
                 hyphen_at =
                     e.checked_sub(1).filter(|&i| b.hyphen && hyph_after.get(i) == Some(&true)).and_then(|i| glyphs.get(i)).map(|g| g.byte + g.len);
@@ -2643,8 +2646,10 @@ struct Cursor {
     aki_below: Option<f64>,
     /// Space before/after waiting to be added to the next line.
     pending: f64,
-    /// In a frame grid: the top of the first row after the last line set (with `last_baseline`).
-    frame_grid_next: f64,
+    /// In a frame grid: the baseline of the last frame-grid line set and the top of the first row
+    /// after it. It holds only while that line is still `last_baseline` (a new sub-column, column
+    /// or table moves the line above without setting a frame-grid line).
+    frame_grid_next: Option<(f64, f64)>,
     /// The paragraph being laid.
     pi: usize,
     /// The band of columns the cursor is in.
