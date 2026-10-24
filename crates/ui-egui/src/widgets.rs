@@ -95,16 +95,17 @@ impl<'a> NumField<'a> {
     pub fn measure(id: &'a str, value: Option<f64>, unit: Unit) -> Self {
         Self::new(id, value, NumKind::Measure(unit))
     }
+    /// A number shown with `suffix` (`%`, `°`). A ` pt` suffix makes it a length in points that
+    /// reads any unit ([`Self::points`]), so no point field reads `13Q` as 13 pt.
     pub fn number(id: &'a str, value: Option<f64>, suffix: &'a str, decimals: usize) -> Self {
+        if suffix == " pt" {
+            return Self::points(id, value, decimals);
+        }
         Self::new(id, value, NumKind::Number { suffix, decimals })
     }
     /// A length in points (type size, leading, stroke weight…): shows `12 pt`, reads any unit.
     pub fn points(id: &'a str, value: Option<f64>, decimals: usize) -> Self {
         Self::new(id, value, NumKind::Points { decimals })
-    }
-    /// [`Self::points`] for the ` pt` suffix, [`Self::number`] for any other.
-    pub fn with_suffix(id: &'a str, value: Option<f64>, suffix: &'a str, decimals: usize) -> Self {
-        if suffix == " pt" { Self::points(id, value, decimals) } else { Self::number(id, value, suffix, decimals) }
     }
     fn new(id: &'a str, value: Option<f64>, kind: NumKind<'a>) -> Self {
         NumField {
@@ -343,7 +344,7 @@ pub fn spin_measure(ui: &mut Ui, id: &str, value: Option<f64>, unit: Unit, width
 
 /// A plain number field (percent, degrees, counts).
 pub fn number(ui: &mut Ui, id: &str, value: Option<f64>, suffix: &str, width: f32, decimals: usize) -> Option<f64> {
-    NumField::with_suffix(id, value, suffix, decimals).width(width).show(ui)
+    NumField::number(id, value, suffix, decimals).width(width).show(ui)
 }
 
 /// A number field with the spinner segment.
@@ -838,7 +839,10 @@ mod tests {
         assert!(close("5mm", 5.0 * designcraft_geom::units::PT_PER_MM));
         assert!(close("9pt+1H", 9.0 + designcraft_geom::units::PT_PER_Q));
         assert_eq!(k.parse("13x"), None, "an unknown unit is an invalid value, not 13 pt");
-        assert_eq!(NumField::with_suffix("a", None, "%", 0).kind, NumKind::Number { suffix: "%", decimals: 0 });
+        // Every ` pt` field reads units, whichever constructor made it (the Control panel's Font
+        // Size, Leading and Baseline Shift, Character ••• Baseline Shift…).
+        assert_eq!(NumField::number("a", None, " pt", 2).kind, NumKind::Points { decimals: 2 });
+        assert_eq!(NumField::number("a", None, "%", 0).kind, NumKind::Number { suffix: "%", decimals: 0 });
     }
 }
 

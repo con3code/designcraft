@@ -5712,7 +5712,7 @@ impl CharFields<'_> {
 /// A number attribute shown multiplied by `scale` (100 for a fraction shown as a percentage).
 fn char_number(ui: &mut egui::Ui, d: &mut Dialog, cf: &CharFields, key: &str, suffix: &str, scale: f64, range: (f64, f64)) {
     let v = cf.get(d, key).as_f64().map(|x| x * scale);
-    let field = crate::widgets::NumField::with_suffix(key, v, suffix, 2).width(80.0).range(range.0, range.1);
+    let field = crate::widgets::NumField::number(key, v, suffix, 2).width(80.0).range(range.0, range.1);
     let edit = if cf.sparse { field.show_or_clear(ui) } else { field.show(ui).map(Some) };
     if let Some(n) = edit {
         cf.set(d, key, n.map_or(Value::Null, |n| json!(n / scale)));
