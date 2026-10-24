@@ -20,8 +20,6 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ("Kerning", "字偶间距"),
     ("Alignment", "对齐"),
     ("Indent", "缩进"),
-    ("Space Before", "段前间距"),
-    ("Space After", "段后间距"),
     ("New Layer", "新建图层"),
     ("Colour Picker", "拾色器"),
     ("Find What", "查找内容"),
