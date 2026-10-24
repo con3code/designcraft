@@ -32,6 +32,7 @@ impl Dialog {
         let defaults = match id {
             "newDocument" => crate::new_document::defaults(),
             "goToPage" => json!({"page": "1"}),
+            "epubExport" => json!({"split": false, "mode": "style", "style": designcraft_doc::BASIC_PARAGRAPH}),
             "qrCode" => json!({"type": "url", "content": "https://", "color": "[Black]"}),
             "insertTable" => json!({"bodyRows": 4, "columns": 4, "headerRows": 0, "footerRows": 0}),
             "insertXref" => json!({"linkTo": "paragraph", "style": "", "target": "", "format": ""}),
@@ -353,6 +354,63 @@ pub fn open_pdf_export(app: &mut DesignApp) {
     app.ui.dialog = Some(Dialog::new("pdfExport", fields));
 }
 
+/// File › Export EPUB…: the EPUB Export Options dialog, seeded from the document's Split
+/// Document setting.
+pub fn open_epub_export(app: &mut DesignApp) {
+    use designcraft_doc::EpubSplit;
+    let split = app.session.active().map(|st| st.doc.settings.epub_split.clone()).unwrap_or_default();
+    let fields = match split {
+        EpubSplit::Off => json!({}),
+        EpubSplit::Style(name) => json!({"split": true, "mode": "style", "style": name}),
+        EpubSplit::ExportTags => json!({"split": true, "mode": "exportTags"}),
+    };
+    app.ui.dialog = Some(Dialog::new("epubExport", fields));
+}
+
+/// The Split Document setting the EPUB Export Options dialog's fields describe.
+fn epub_export_split(d: &Dialog) -> designcraft_doc::EpubSplit {
+    use designcraft_doc::EpubSplit;
+    if !d.b("split") {
+        EpubSplit::Off
+    } else if d.s("mode") == "exportTags" {
+        EpubSplit::ExportTags
+    } else {
+        EpubSplit::Style(d.s("style"))
+    }
+}
+
+fn epub_export(app: &crate::DesignApp, ui: &mut egui::Ui, d: &mut Dialog) {
+    let lang = app.ui.language.as_str();
+    let styles: Vec<String> = app
+        .session
+        .active()
+        .map(|st| st.doc.styles.paragraph.iter().map(|s| s.name.clone()).filter(|n| n != designcraft_doc::NO_PARA_STYLE).collect())
+        .unwrap_or_default();
+    check(ui, d, "split", crate::i18n::tr(lang, "Split Document"));
+    ui.add_enabled_ui(d.b("split"), |ui| {
+        ui.indent("epub_split", |ui| {
+            let mode = d.s("mode");
+            ui.horizontal(|ui| {
+                if ui.radio(mode != "exportTags", crate::rtl::widget(ui, crate::i18n::tr(lang, "Single Paragraph Style"))).clicked() {
+                    d.fields.insert("mode".into(), json!("style"));
+                }
+                let cur = d.s("style");
+                egui::ComboBox::from_id_salt("epub_split_style").selected_text(crate::rtl::widget(ui, &cur)).width(180.0).show_ui(ui, |ui| {
+                    for name in &styles {
+                        if ui.selectable_label(cur == *name, crate::rtl::widget(ui, name)).clicked() {
+                            d.fields.insert("style".into(), json!(name));
+                            d.fields.insert("mode".into(), json!("style"));
+                        }
+                    }
+                });
+            });
+            if ui.radio(mode == "exportTags", crate::rtl::widget(ui, crate::i18n::tr(lang, "Based on Paragraph Style Export Tags"))).clicked() {
+                d.fields.insert("mode".into(), json!("exportTags"));
+            }
+        });
+    });
+}
+
 fn print_dialog(app: &crate::DesignApp, ui: &mut egui::Ui, d: &mut Dialog) {
     let printers: Vec<String> = d
         .fields
@@ -527,6 +585,15 @@ fn seed_text_frame_options(app: &DesignApp, d: &mut Dialog) {
         _ => ((inner - o.gutter * (n - 1.0)) / n).max(0.0),
     };
     let kind = |v: Value| v.as_str().unwrap_or_default().to_string();
+    // A frame without a custom baseline grid shows the document grid's start and increment.
+    let grid = o.baseline_grid.unwrap_or_else(|| {
+        let g = app.session.active().map(|s| s.doc.settings.baseline_grid.clone()).unwrap_or_default();
+        let relative_to = match g.relative_to {
+            designcraft_doc::GridRelative::TopOfPage => designcraft_doc::FrameGridRelative::TopOfPage,
+            designcraft_doc::GridRelative::TopMargin => designcraft_doc::FrameGridRelative::TopMargin,
+        };
+        designcraft_doc::FrameBaselineGrid { start: g.start, increment: g.increment, relative_to }
+    });
     let shown = json!({
         "columns": o.columns, "gutter": fm(o.gutter),
         "columnsKind": kind(serde_json::to_value(o.columns_kind).unwrap_or_default()), "columnWidth": fm(width),
@@ -542,6 +609,8 @@ fn seed_text_frame_options(app: &DesignApp, d: &mut Dialog) {
         "useMinimumHeight": o.auto_size_use_min_height, "minimumHeight": fm(o.auto_size_min_height),
         "useMinimumWidth": o.auto_size_use_min_width, "minimumWidth": fm(o.auto_size_min_width),
         "noLineBreaks": o.auto_size_no_line_breaks,
+        "customGrid": o.baseline_grid.is_some(), "gridStart": fm(grid.start), "gridIncrement": fm(grid.increment),
+        "gridRelativeTo": grid.relative_to.name(),
     });
     if let Value::Object(m) = &shown {
         for (k, v) in m {
@@ -592,6 +661,28 @@ fn text_frame_options_dialog(app: &DesignApp, ui: &mut egui::Ui, d: &mut Dialog)
                     crate::rtl::label(ui, tr("Min:"));
                     text_field(ui, d, "firstBaselineMin", 70.0);
                     ui.end_row();
+                });
+                ui.add_space(8.0);
+                crate::rtl::label(ui, egui::RichText::new(tr("Baseline Grid")).font(semibold(12.0)));
+                check(ui, d, "customGrid", tr("Use Custom Baseline Grid"));
+                ui.add_enabled_ui(d.b("customGrid"), |ui| {
+                    egui::Grid::new("tfo_grid").num_columns(2).spacing([8.0, 6.0]).show(ui, |ui| {
+                        crate::rtl::label(ui, tr("Start:"));
+                        text_field(ui, d, "gridStart", 70.0);
+                        ui.end_row();
+                        crate::rtl::label(ui, tr("Relative To:"));
+                        translated_combo(
+                            &lang,
+                            ui,
+                            d,
+                            "gridRelativeTo",
+                            &[("page", "Top of Page"), ("margin", "Top Margin"), ("frame", "Top of Frame"), ("inset", "Top Inset")],
+                        );
+                        ui.end_row();
+                        crate::rtl::label(ui, tr("Increment Every:"));
+                        text_field(ui, d, "gridIncrement", 70.0);
+                        ui.end_row();
+                    });
                 });
             }
             "autosize" => auto_size(&lang, ui, d),
@@ -855,6 +946,30 @@ fn confirm_text_frame_options(app: &mut DesignApp, d: &mut Dialog) -> Result<Val
     for (key, what) in [("minimumHeight", "the minimum height is not a measure"), ("minimumWidth", "the minimum width is not a measure")] {
         if edited(d, key) {
             p.insert(key.into(), json!(d.m(key).filter(|v| *v >= 0.0).ok_or_else(|| bad(what))?));
+        }
+    }
+    // The custom baseline grid: off, or the fields the user changed (all of them when it is
+    // turned on, since it shows the document grid's).
+    let grid_keys = ["customGrid", "gridStart", "gridIncrement", "gridRelativeTo"];
+    if grid_keys.iter().any(|k| edited(d, k)) {
+        if d.b("customGrid") {
+            let all = edited(d, "customGrid");
+            let mut g = Map::new();
+            if all || edited(d, "gridStart") {
+                g.insert("start".into(), json!(d.m("gridStart").ok_or_else(|| bad("the baseline grid start is not a measure"))?));
+            }
+            if all || edited(d, "gridIncrement") {
+                g.insert(
+                    "increment".into(),
+                    json!(d.m("gridIncrement").filter(|v| *v > 0.0).ok_or_else(|| bad("the baseline grid increment is not a measure"))?),
+                );
+            }
+            if all || edited(d, "gridRelativeTo") {
+                g.insert("relativeTo".into(), json!(d.s("gridRelativeTo")));
+            }
+            p.insert("baselineGrid".into(), Value::Object(g));
+        } else {
+            p.insert("baselineGrid".into(), Value::Null);
         }
     }
     if p.is_empty() {
@@ -2270,6 +2385,7 @@ pub fn show(app: &mut DesignApp, ctx: &egui::Context) {
         "print" => crate::i18n::tr(&app.ui.language, "Print"),
         "pdfImport" => crate::i18n::tr(&app.ui.language, "Place PDF"),
         "pdfExport" => crate::i18n::tr(&app.ui.language, "Export PDF"),
+        "epubExport" => crate::i18n::tr(&app.ui.language, "EPUB Export Options"),
         "colorSettings" => crate::i18n::tr(&app.ui.language, "Color Settings"),
         "layerOptions" => crate::i18n::tr(&app.ui.language, "Object Layer Options"),
         "keyboardShortcuts" => crate::i18n::tr(&app.ui.language, "Keyboard Shortcuts"),
@@ -3009,6 +3125,7 @@ pub fn show(app: &mut DesignApp, ctx: &egui::Context) {
                     "frameGridOptions" => frame_grid_options(app, ui, &mut d),
                     "numberingSection" => crate::section_options::body(app, ui, &mut d),
                     "pdfExport" => pdf_export(app, ui, &mut d),
+                    "epubExport" => epub_export(app, ui, &mut d),
                     "alert" => {
                         let file = d.s("file");
                         if !file.is_empty() {
@@ -3535,6 +3652,15 @@ pub fn confirm(app: &mut DesignApp) -> Result<Value, String> {
             app.status(crate::i18n::tr(&app.ui.language, "Sent {count} page(s) to {printer}").replace("{count}", &r["pages"].to_string()).replace("{printer}", printer));
             Ok(r)
         }
+        "epubExport" => {
+            let split = epub_export_split(&d);
+            let stored = app.session.active().map(|st| st.doc.settings.epub_split.clone());
+            if stored.as_ref() != Some(&split) {
+                let v = serde_json::to_value(&split).map_err(|e| e.to_string())?;
+                app.run("document.epubSplit", json!({"split": v}))?;
+            }
+            crate::menus::export_epub(app, &json!({}))
+        }
         "pdfExport" => {
             // Remember the last-used options; `pages` and `title` are per-job and not persisted.
             app.ui.pdf_export.preset = d.s("preset");
@@ -3960,7 +4086,7 @@ fn confirm_paragraph_style_options(app: &mut DesignApp, d: &mut Dialog) -> Resul
     if d.fields.contains_key("x.tag") {
         let tag = d.s("x.tag");
         let tag = if tag == "[Automatic]" { String::new() } else { tag };
-        app.run("style.exportTag", json!({"style": style, "tag": tag, "class": d.s("x.class")}))?;
+        app.run("style.exportTag", json!({"style": style, "tag": tag, "class": d.s("x.class"), "split": d.b("x.split")}))?;
     }
     Ok(r)
 }
@@ -4111,6 +4237,7 @@ fn paragraph_style_options(app: &mut DesignApp, ui: &mut egui::Ui, d: &mut Dialo
                 if !d.fields.contains_key("x.tag") {
                     d.fields.insert("x.tag".into(), json!(if et.tag.is_empty() { "[Automatic]" } else { et.tag.as_str() }));
                     d.fields.insert("x.class".into(), json!(et.class));
+                    d.fields.insert("x.split".into(), json!(et.split));
                 }
                 ui.horizontal(|ui| {
                     crate::rtl::label(ui, crate::i18n::tr(&app.ui.language, "Tag:"));
@@ -4130,6 +4257,7 @@ fn paragraph_style_options(app: &mut DesignApp, ui: &mut egui::Ui, d: &mut Dialo
                     crate::rtl::label(ui, crate::i18n::tr(&app.ui.language, "Class:"));
                     text_field(ui, d, "x.class", 160.0);
                 });
+                check(ui, d, "x.split", crate::i18n::tr(&app.ui.language, "Split Document (EPUB only)"));
             }
             "nested" => drop_caps_and_nested_styles(&app.ui.language, ui, d, &pv, &cnames),
             "grep" => grep_styles(&app.ui.language, ui, d, &pv, &cnames),
@@ -4163,7 +4291,32 @@ fn paragraph_style_options(app: &mut DesignApp, ui: &mut egui::Ui, d: &mut Dialo
                         }
                         ui.end_row();
                     }
+                    // The CJK Grid Settings section edits the same `p.gridAlign` field.
+                    use designcraft_doc::GridAlign;
+                    const GRID_ALIGN: [(GridAlign, &str); 3] =
+                        [(GridAlign::None, "None"), (GridAlign::AllLines, "All Lines"), (GridAlign::FirstLineOnly, "First Line Only")];
+                    crate::rtl::label(ui, crate::i18n::tr(&app.ui.language, "Align to Grid:"));
+                    let g: GridAlign = serde_json::from_value(cur(d, "p.gridAlign", &pv["gridAlign"])).unwrap_or_default();
+                    let shown = GRID_ALIGN.iter().find(|o| o.0 == g).map_or("", |o| o.1);
+                    egui::ComboBox::from_id_salt("psgridalign")
+                        .selected_text(crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, shown)))
+                        .width(240.0)
+                        .show_ui(ui, |ui| {
+                            for (v, label) in GRID_ALIGN {
+                                if ui.selectable_label(v == g, crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, label))).clicked()
+                                    && let Ok(v) = serde_json::to_value(v)
+                                {
+                                    d.fields.insert("p.gridAlign".into(), v);
+                                }
+                            }
+                        });
+                    ui.end_row();
                 });
+                ui.add_space(6.0);
+                let mut ignore = cur(d, "p.ignoreOpticalMargin", &pv["ignoreOpticalMargin"]).as_bool().unwrap_or(false);
+                if ui.checkbox(&mut ignore, crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, "Ignore Optical Margin"))).changed() {
+                    d.fields.insert("p.ignoreOpticalMargin".into(), json!(ignore));
+                }
             }
             "tabs" => style_tabs(&app.ui.language, ui, d, &pv, &doc),
             "rules" => paragraph_rules(app, ui, d, "p.", &pv),
@@ -7973,6 +8126,35 @@ mod tests {
     }
 
     #[test]
+    fn paragraph_style_options_ignore_optical_margin_is_set_on_ok() {
+        use egui_kittest::{Harness, kittest::Queryable};
+        let mut app = DesignApp::new(designcraft_engine::Session::new(), crate::Services::default());
+        app.run("file.new", json!({})).unwrap();
+        app.run("style.paragraph.create", json!({"name": "Flush"})).unwrap();
+        app.ui.dialog = Some(Dialog::new("paragraphStyleOptions", json!({"name": "Flush", "section": "indents"})));
+        let mut h = Harness::builder().with_size(egui::vec2(1000.0, 800.0)).build_ui_state(
+            |ui, app: &mut DesignApp| {
+                let key = egui::Id::new("ignore_optical_margin_fonts");
+                if ui.data(|d| d.get_temp::<bool>(key)).is_none() {
+                    crate::theme::install_fonts(ui.ctx(), "");
+                    ui.data_mut(|d| d.insert_temp(key, true));
+                    return;
+                }
+                show(app, ui.ctx());
+            },
+            app,
+        );
+        h.run_steps(3);
+        h.get_by_label("Ignore Optical Margin").click();
+        h.run_steps(3);
+        h.get_by_label("  OK  ").click();
+        h.run_steps(3);
+        let app = h.state();
+        assert!(app.ui.dialog.is_none());
+        assert_eq!(app.session.doc().unwrap().doc.styles.para("Flush").unwrap().para.ignore_optical_margin, Some(true));
+    }
+
+    #[test]
     fn paragraph_style_options_keep_a_bad_grep_pattern_open_with_the_error() {
         let (mut app, _) = ruled_paragraph();
         let ctx = egui::Context::default();
@@ -8483,6 +8665,35 @@ mod tests {
         app.ui.dialog = Some(d);
         confirm(&mut app).unwrap();
         assert_eq!((opts(&app).columns_kind, opts(&app).column_width), (designcraft_doc::ColumnsKind::FixedNumber, 120.0));
+    }
+
+    #[test]
+    fn text_frame_options_set_a_custom_baseline_grid_relative_to() {
+        use designcraft_doc::{FrameBaselineGrid, FrameGridRelative};
+        let mut app = crate::DesignApp::new(designcraft_engine::Session::new(), crate::Services::default());
+        app.run("file.new", json!({})).unwrap();
+        let r = app.run("frame.create", json!({"rect": [36, 36, 336, 236], "content": "text", "text": "Hello"})).unwrap();
+        let id = designcraft_doc::ItemId(r["id"].as_u64().unwrap());
+        let grid = |app: &DesignApp| app.session.doc().unwrap().doc.item(id).unwrap().text_frame().unwrap().options.baseline_grid;
+        let open = |app: &mut DesignApp, fields: &[(&str, Value)]| {
+            let mut d = Dialog::new("textFrameOptions", json!({}));
+            seed_text_frame_options(app, &mut d);
+            for (k, v) in fields {
+                d.fields.insert((*k).into(), v.clone());
+            }
+            app.ui.dialog = Some(d);
+            confirm(app)
+        };
+        app.run("selection.set", json!({"ids": [id.0]})).unwrap();
+        // Turned on, the grid takes the shown start and increment (the document grid's: 3p0 and 1p0).
+        open(&mut app, &[("customGrid", json!(true)), ("gridRelativeTo", json!("frame"))]).unwrap();
+        assert_eq!(grid(&app), Some(FrameBaselineGrid { start: 36.0, increment: 12.0, relative_to: FrameGridRelative::TopOfFrame }));
+        // The dialog shows the frame's grid; changing Relative To keeps its start and increment.
+        open(&mut app, &[("gridStart", json!("0p10"))]).unwrap();
+        open(&mut app, &[("gridRelativeTo", json!("inset"))]).unwrap();
+        assert_eq!(grid(&app), Some(FrameBaselineGrid { start: 10.0, increment: 12.0, relative_to: FrameGridRelative::TopInset }));
+        open(&mut app, &[("customGrid", json!(false))]).unwrap();
+        assert_eq!(grid(&app), None);
     }
 
     #[test]
@@ -9841,6 +10052,31 @@ mod tests {
     }
 
     #[test]
+    fn paragraph_style_options_align_to_grid_shows_and_sets_the_style_grid_alignment() {
+        use designcraft_doc::GridAlign;
+        use egui_kittest::kittest::Queryable;
+        let mut app = test_app();
+        app.session.execute("style.paragraph.create", &json!({"name": "Grid Body", "para": {"gridAlign": "firstLineOnly"}})).unwrap();
+        app.ui.dialog = Some(Dialog::new("paragraphStyleOptions", json!({"name": "Grid Body", "section": "indents"})));
+        let mut h = crate::test_window::open(app, egui::vec2(1400.0, 900.0));
+        let grid = |h: &egui_kittest::Harness<'static, crate::test_window::Window>| {
+            h.state().app.session.active().unwrap().doc.styles.para("Grid Body").unwrap().para.grid_align
+        };
+        h.run_steps(4);
+        h.get_by_value("First Line Only");
+        confirm(&mut h.state_mut().app).unwrap();
+        assert_eq!(grid(&h), Some(GridAlign::FirstLineOnly), "OK without edits keeps the style's alignment");
+        h.state_mut().app.ui.dialog = Some(Dialog::new("paragraphStyleOptions", json!({"name": "Grid Body", "section": "indents"})));
+        h.run_steps(4);
+        h.get_by_value("First Line Only").click();
+        h.run_steps(3);
+        h.get_by_label("All Lines").click();
+        h.run_steps(3);
+        confirm(&mut h.state_mut().app).unwrap();
+        assert_eq!(grid(&h), Some(GridAlign::AllLines));
+    }
+
+    #[test]
     fn delete_paragraph_style_dialog_removes_the_style_and_reassigns_text() {
         let mut app = test_app();
         let name = app.session.execute("style.paragraph.create", &json!({"name": "Caption"})).unwrap()["name"].as_str().unwrap().to_string();
@@ -9902,6 +10138,70 @@ mod tests {
         confirm(&mut app).expect("OK deletes the style with the default replacement");
         let st = app.session.active().unwrap();
         assert!(st.doc.styles.char_style(&name).is_none());
+    }
+
+    /// File › Export EPUB… opens EPUB Export Options from the document's setting; OK stores a
+    /// changed Split Document as one undo step, and an unchanged one adds none.
+    #[test]
+    fn epub_export_passes_its_options_to_the_engine() {
+        use std::io::Read;
+        use std::sync::{Arc, Mutex};
+        let mut app = test_app();
+        app.session.execute("style.paragraph.create", &json!({"name": "Chapter"})).unwrap();
+        let r = app.session.execute("frame.create", &json!({"rect": [36, 36, 300, 300], "content": "text", "text": "One\nTwo"})).unwrap();
+        let sid = r["story"].as_u64().unwrap();
+        for anchor in [0, 4] {
+            app.session.execute("text.select", &json!({"story": sid, "anchor": anchor, "focus": anchor})).unwrap();
+            app.session.execute("style.paragraph.apply", &json!({"name": "Chapter"})).unwrap();
+        }
+        let written: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+        let sink = written.clone();
+        app.services.write = Some(Box::new(move |_: &str, bytes: &[u8]| {
+            *sink.lock().unwrap() = bytes.to_vec();
+            Ok(())
+        }));
+        crate::menus::export_epub(&mut app, &json!({"path": "book.epub", "split": {"style": "Chapter"}})).unwrap();
+        let bytes = written.lock().unwrap().clone();
+        let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        let mut opf = String::new();
+        z.by_name("OEBPS/content.opf").unwrap().read_to_string(&mut opf).unwrap();
+        assert!(opf.contains("properties=\"cover-image\""), "the first page is the cover: {opf}");
+        assert!(z.by_name("OEBPS/content2.xhtml").is_ok(), "the split override reaches the export");
+        assert_eq!(app.session.active().unwrap().doc.settings.epub_split, designcraft_doc::EpubSplit::Off, "an override is not stored");
+        crate::menus::export_epub(&mut app, &json!({"path": "book.epub", "cover": false})).unwrap();
+        let bytes = written.lock().unwrap().clone();
+        let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        let mut opf = String::new();
+        z.by_name("OEBPS/content.opf").unwrap().read_to_string(&mut opf).unwrap();
+        assert!(!opf.contains("cover-image"), "a caller's cover: false stays: {opf}");
+    }
+
+    #[test]
+    fn epub_export_options_store_split_document() {
+        use designcraft_doc::EpubSplit;
+        let mut app = test_app();
+        app.session.execute("style.paragraph.create", &json!({"name": "Chapter"})).unwrap();
+        let undo_steps = |app: &crate::DesignApp| app.session.active().map(|st| st.history.undo.len());
+        app.run("app.exportEpub", json!({})).unwrap();
+        let d = app.ui.dialog.as_mut().unwrap();
+        assert_eq!((d.id.as_str(), d.b("split"), d.s("style").as_str()), ("epubExport", false, designcraft_doc::BASIC_PARAGRAPH));
+        d.fields.insert("split".into(), json!(true));
+        d.fields.insert("style".into(), json!("Chapter"));
+        let before = undo_steps(&app);
+        confirm(&mut app).unwrap();
+        assert_eq!(app.session.active().unwrap().doc.settings.epub_split, EpubSplit::Style("Chapter".into()));
+        assert_eq!(undo_steps(&app), before.map(|n| n + 1));
+        open_epub_export(&mut app);
+        assert_eq!(app.ui.dialog.as_ref().map(|d| (d.b("split"), d.s("mode"), d.s("style"))), Some((true, "style".into(), "Chapter".into())));
+        confirm(&mut app).unwrap();
+        assert_eq!(undo_steps(&app), before.map(|n| n + 1), "unchanged: no undo step");
+        open_epub_export(&mut app);
+        app.ui.dialog.as_mut().unwrap().fields.insert("mode".into(), json!("exportTags"));
+        confirm(&mut app).unwrap();
+        assert_eq!(app.session.active().unwrap().doc.settings.epub_split, EpubSplit::ExportTags);
+        open_epub_export(&mut app);
+        cancel(&mut app);
+        assert_eq!(app.session.active().unwrap().doc.settings.epub_split, EpubSplit::ExportTags, "Cancel stores nothing");
     }
 
     #[test]

@@ -778,6 +778,15 @@ impl<'a> Ex<'a> {
                 designcraft_doc::BlendSpace::Rgb => "RGB",
             },
         ));
+        // Split Document: the style is a reference, a built-in one by its `$ID/` name; an empty
+        // one splits on the styles' export tags.
+        let (break_doc, split_style) = match &s.epub_split {
+            designcraft_doc::EpubSplit::Off => (false, names::style_name_out(PARA_BUILTINS, st::BASIC_PARAGRAPH)),
+            designcraft_doc::EpubSplit::ExportTags => (true, String::new()),
+            designcraft_doc::EpubSplit::Style(n) if PARA_BUILTINS.iter().any(|(o, _)| o == n) => (true, names::style_name_out(PARA_BUILTINS, n)),
+            designcraft_doc::EpubSplit::Style(n) => (true, names::style_self("ParagraphStyle", PARA_BUILTINS, n)),
+        };
+        root.push(El::new("EPubExportPreference").attr("BreakDocument", bool_s(break_doc)).attr("ParagraphStyleName", split_style));
         let a = &s.advanced_type;
         root.push(
             El::new("TextPreference")
@@ -848,6 +857,9 @@ impl<'a> Ex<'a> {
             let pa = with_list_tab(pa, || (styles.resolve_para_style(&ps.name).0, parent_props));
             self.para_attrs(&mut el, &mut props, &pa, parent);
             self.char_attrs(&mut el, &mut props, &ca);
+            if styles.export_tag(&ps.name, false).is_some_and(|t| t.split) {
+                el.set("SplitDocument", "true");
+            }
             pg.insert(&ps.name, with_props(el, props));
         }
         let mut rp = El::new("RootParagraphStyleGroup").attr("Self", self.fresh());
@@ -1528,6 +1540,7 @@ impl<'a> Ex<'a> {
         }
         n!(keep_with_next, "KeepWithNext");
         b!(keep_lines_together, "KeepLinesTogether");
+        b!(ignore_optical_margin, "IgnoreEdgeAlignment");
         b!(keep_all_lines, "KeepAllLinesTogether");
         n!(keep_first, "KeepFirstLines");
         n!(keep_last, "KeepLastLines");
@@ -1949,6 +1962,15 @@ impl<'a> Ex<'a> {
                     El::new("BaselineFrameGridOption")
                         .attr("UseCustomBaselineFrameGrid", "true")
                         .attr("StartingOffsetForBaselineFrameGrid", num(g.start))
+                        .attr(
+                            "BaselineFrameGridRelativeOption",
+                            match g.relative_to {
+                                designcraft_doc::FrameGridRelative::TopOfPage => "TopOfPageOfBaselineFrameGridRelativeOption",
+                                designcraft_doc::FrameGridRelative::TopMargin => "TopOfMarginOfBaselineFrameGridRelativeOption",
+                                designcraft_doc::FrameGridRelative::TopOfFrame => "TopOfFrameOfBaselineFrameGridRelativeOption",
+                                designcraft_doc::FrameGridRelative::TopInset => "TopOfInsetOfBaselineFrameGridRelativeOption",
+                            },
+                        )
                         .attr("BaselineFrameGridIncrement", num(g.increment)),
                 );
             }
@@ -2217,8 +2239,11 @@ impl<'a> Ex<'a> {
             .attr("StoryTitle", "$ID/");
         el.push(
             El::new("StoryPreference")
-                .attr("OpticalMarginAlignment", "false")
-                .attr("OpticalMarginSize", "12")
+                .attr("OpticalMarginAlignment", bool_s(s.optical_margin.on))
+                .attr(
+                    "OpticalMarginSize",
+                    num(designcraft_doc::OpticalMargin::clamp_size(s.optical_margin.size).unwrap_or(designcraft_doc::OpticalMargin::DEFAULT_SIZE)),
+                )
                 .attr("FrameType", "TextFrameType")
                 .attr("StoryOrientation", if s.vertical { "Vertical" } else { "Horizontal" })
                 .attr(
