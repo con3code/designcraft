@@ -228,3 +228,32 @@ fn frame_grid_text_takes_the_paragraphs_mojikumi() {
         }
     }
 }
+
+/// A frame grid line starts at the first row after the line above it, also when the line above
+/// changes without a frame-grid line: a split paragraph that fills its first sub-column goes on
+/// at the block's top in the next, not below the previous sub-column's last row.
+#[test]
+fn frame_grid_sub_columns_of_a_split_paragraph_start_together() {
+    let text = format!("{}\n{}", "漢".repeat(10), "漢".repeat(16));
+    let (mut d, sid, _) = grid_doc(&text, grid(), 10, 3, false);
+    let p = &mut d.story_mut(sid).unwrap().paras[1].para;
+    p.span_columns = Some(designcraft_doc::SpanColumns::Split(2));
+    p.split_inside_gutter = Some(12.0);
+    p.split_outside_gutter = Some(0.0);
+    let cs = compose_story(&d, sid, &ComposeOptions::default());
+    assert!(!cs.is_overset());
+    let ls: Vec<&Line> = cs.frames[0].lines.iter().filter(|l| l.para == 1).collect();
+    let firsts: Vec<f64> = ["left", "right"]
+        .iter()
+        .enumerate()
+        .filter_map(|(k, _)| {
+            let x0 = ls.iter().map(|l| l.x0).fold(f64::INFINITY, f64::min);
+            ls.iter().filter(|l| (l.x0 > x0 + 1.0) == (k == 1)).map(|l| l.baseline).reduce(f64::min)
+        })
+        .collect();
+    assert_eq!(firsts.len(), 2, "{:?}", ls.iter().map(|l| (l.x0, l.baseline)).collect::<Vec<_>>());
+    assert!((firsts[0] - firsts[1]).abs() < 1e-6, "sub-columns start at {firsts:?}");
+    // The block starts in the row after the first paragraph's line (rows are 15 pt apart).
+    let intro = cs.frames[0].lines[0].baseline;
+    assert!((firsts[0] - intro - 15.0).abs() < 1e-6, "{intro} then {firsts:?}");
+}

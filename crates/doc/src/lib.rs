@@ -345,6 +345,26 @@ pub enum ChapterSource {
     SameAsPrevious,
 }
 
+/// EPUB Export Options › Split Document: where a reflowable EPUB starts a new content file.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EpubSplit {
+    /// One content file.
+    #[default]
+    Off,
+    /// Single Paragraph Style: a file starts before each paragraph of the named style.
+    Style(String),
+    /// Based on Paragraph Style Export Tags: a file starts before each paragraph of a style whose
+    /// Export Tagging has Split Document on.
+    ExportTags,
+}
+
+impl EpubSplit {
+    pub fn is_off(&self) -> bool {
+        *self == EpubSplit::Off
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct DocSettings {
@@ -422,6 +442,9 @@ pub struct DocSettings {
     /// The grid new frame grids get (Horizontal / Vertical Grid tools, Object › Frame Type ›
     /// Frame Grid).
     pub frame_grid: crate::framegrid::FrameGrid,
+    /// EPUB Export Options › Split Document.
+    #[serde(skip_serializing_if = "EpubSplit::is_off")]
+    pub epub_split: EpubSplit,
 }
 
 fn is_true(b: &bool) -> bool {
@@ -488,6 +511,7 @@ impl Default for DocSettings {
             column_guides_locked: true,
             new_object: NewObjectColors::default(),
             frame_grid: crate::framegrid::FrameGrid::default(),
+            epub_split: EpubSplit::Off,
         }
     }
 }

@@ -688,6 +688,9 @@ impl<'r> Importer<'r> {
         if let Some(e) = top.iter().find(|e| e.local() == "FootnoteOption") {
             self.footnote_option(e);
         }
+        if let Some(e) = top.iter().find(|e| e.local() == "EPubExportPreference") {
+            self.epub_split(e);
+        }
         for e in top.iter().filter(|e| e.local() == "Layer") {
             let id = LayerId(self.alloc());
             let color = match e.prop_el("LayerColor") {
@@ -1193,6 +1196,14 @@ impl<'r> Importer<'r> {
                 Some(slot) => *slot = s,
                 None => self.styles.paragraph.push(s),
             }
+            // Split Document (EPUB only): on the style, and on its EPUB export tag map. Files write
+            // `false` on every style, so either place saying `true` turns it on.
+            let split = e.get("SplitDocument") == Some("true")
+                || e.elements()
+                    .any(|m| m.local() == "StyleExportTagMap" && m.get("ExportType") == Some("EPUB") && m.get("SplitDocument") == Some("true"));
+            if split {
+                self.styles.export_tags.entry(format!("p:{name}")).or_default().split = true;
+            }
         }
         for (_, e) in &chars {
             let name = names::style_name_in(CHAR_BUILTINS, e.get("Name").unwrap_or(""));
@@ -1465,6 +1476,21 @@ impl<'r> Importer<'r> {
             Some(f) => f.definition = def,
             None => self.xref_formats.push(designcraft_doc::XrefFormat { name, definition: def }),
         }
+    }
+
+    /// Preferences › `EPubExportPreference`: Split Document (after styles: it can name one). An
+    /// empty style name splits on the styles' export tags; a style the file lacks splits nothing.
+    fn epub_split(&mut self, e: &El) {
+        if e.boolean("BreakDocument") != Some(true) {
+            return;
+        }
+        let name = e.get("ParagraphStyleName").unwrap_or("$ID/NormalParagraphStyle");
+        self.settings.epub_split = if name.trim().is_empty() {
+            designcraft_doc::EpubSplit::ExportTags
+        } else {
+            let style = self.para_style_ref(name);
+            if self.styles.para(&style).is_some() { designcraft_doc::EpubSplit::Style(style) } else { designcraft_doc::EpubSplit::Off }
+        };
     }
 
     /// Preferences › `FootnoteOption` (after styles: it names the footnote text and marker styles).
@@ -1826,6 +1852,7 @@ impl<'r> Importer<'r> {
         a.single_word_justify = e.prop("SingleWordJustification").and_then(|v| names::align_in(v.trim()));
         a.keep_with_next = u("KeepWithNext");
         a.keep_lines_together = e.boolean("KeepLinesTogether");
+        a.ignore_optical_margin = e.boolean("IgnoreEdgeAlignment");
         a.keep_all_lines = e.boolean("KeepAllLinesTogether");
         a.keep_first = u("KeepFirstLines");
         a.keep_last = u("KeepLastLines");
@@ -2101,6 +2128,14 @@ impl<'r> Importer<'r> {
             let format = self.xref_format_names.get(&fmt).cloned().unwrap_or_else(|| "Full Paragraph & Page Number".into());
             xref_list.push(Arc::new(designcraft_doc::CrossRef { target: 0, format }));
         }
+        let pref = e.find("StoryPreference");
+        let optical_margin = designcraft_doc::OpticalMargin {
+            on: pref.and_then(|p| p.boolean("OpticalMarginAlignment")).unwrap_or(false),
+            size: pref
+                .and_then(|p| p.num("OpticalMarginSize"))
+                .and_then(designcraft_doc::OpticalMargin::clamp_size)
+                .unwrap_or(designcraft_doc::OpticalMargin::DEFAULT_SIZE),
+        };
         let mut st = Story {
             id,
             text,
@@ -2113,6 +2148,7 @@ impl<'r> Importer<'r> {
                 designcraft_doc::TextDirection::LeftToRight
             },
             vertical: e.find("StoryPreference").and_then(|p| p.get("StoryOrientation")) == Some("Vertical"),
+            optical_margin,
             rev: 0,
             tables,
             notes,
@@ -2983,6 +3019,7 @@ impl<'r> Importer<'r> {
                     options.baseline_grid = Some(designcraft_doc::FrameBaselineGrid {
                         start: g.num("StartingOffsetForBaselineFrameGrid").unwrap_or(0.0),
                         increment: g.num("BaselineFrameGridIncrement").unwrap_or(12.0),
+                        relative_to: g.get("BaselineFrameGridRelativeOption").map(frame_grid_relative).unwrap_or_default(),
                     });
                 }
                 it.content = Content::Text(TextFrame { story, options });
@@ -3522,6 +3559,19 @@ fn fit_columns(mut columns: Columns, margins: &Margins, page_width: f64) -> Colu
         columns.positions = None;
     }
     columns
+}
+
+/// A `BaselineFrameGridRelativeOption` value (`TopOfInsetOfBaselineFrameGridRelativeOption`, or a
+/// short form such as `TopOfInset`); unknown values measure from the top of the page.
+fn frame_grid_relative(v: &str) -> designcraft_doc::FrameGridRelative {
+    use designcraft_doc::FrameGridRelative as R;
+    let v = v.strip_suffix("OfBaselineFrameGridRelativeOption").unwrap_or(v);
+    match v {
+        "TopOfMargin" | "TopMargin" => R::TopMargin,
+        "TopOfFrame" => R::TopOfFrame,
+        "TopOfInset" | "TopInset" => R::TopInset,
+        _ => R::TopOfPage,
+    }
 }
 
 /// Text Frame Options from `TextFramePreference` elements: each attribute from the first that sets it.
