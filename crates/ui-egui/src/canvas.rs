@@ -2774,6 +2774,11 @@ pub(crate) fn has_kana(text: &str) -> bool {
 fn ime_event(app: &mut DesignApp, e: egui::ImeEvent, vi: designcraft_engine::ViewInfo) {
     let r = match e {
         egui::ImeEvent::Preedit { text, active_range_chars } => {
+            // A new composition: kana from one the input method cancelled (Escape) don't count.
+            // The empty preedit before a commit keeps them, as something is still marked then.
+            if app.ime_marked.is_none() {
+                app.ime_kana_seen = false;
+            }
             app.ime_marked = Some(text.clone()).filter(|t| !t.is_empty());
             app.ime_kana_seen |= has_kana(&text);
             app.session.tool_preedit(&text, active_range_chars, vi).map_err(|e| e.to_string())
@@ -5825,6 +5830,19 @@ mod tests {
             want += &format!("{commit}{space}");
             assert_eq!(story_text(&mut app, &sid), want, "{commit}");
         }
+    }
+
+    /// Kana from a composition cancelled with Escape (the input method clears the marked text and
+    /// commits nothing) don't make the next composition Japanese.
+    #[test]
+    fn a_cancelled_japanese_composition_does_not_carry_over() {
+        let mut app = DesignApp::new(designcraft_engine::Session::new(), crate::Services::default());
+        let ctx = egui::Context::default();
+        let sid = typing_app(&mut app, &ctx, "");
+        ime_frame(&mut app, &ctx, vec![preedit("にほ", 2), preedit("", 0)]);
+        ime_frame(&mut app, &ctx, vec![preedit("ni", 2), preedit("", 0), egui::Event::Ime(egui::ImeEvent::Commit("你".into()))]);
+        ime_frame(&mut app, &ctx, vec![egui::Event::Text(" ".into())]);
+        assert_eq!(story_text(&mut app, &sid), "你 ");
     }
 
     #[test]
