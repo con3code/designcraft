@@ -254,7 +254,7 @@ fn find_markers(text: &str) -> Vec<(usize, usize, String)> {
                 continue;
             }
         }
-        i += text[i..].chars().next().map(|c| c.len_utf8()).unwrap_or(1);
+        i += text[i..].chars().next().map(char::len_utf8).unwrap_or(1);
     }
     out
 }
@@ -369,6 +369,7 @@ fn place_image(
     };
     let mode = fitting_of(&options.fitting);
     let mut g = Graphic {
+        layer_options: None,
         asset: AssetId(0),
         size: (nw, nh),
         xf: Affine::translate((inner.x0, inner.y0)),
@@ -495,5 +496,23 @@ mod link_tests {
         for bad in ["javascript:alert(1)", "file:///etc/passwd", "data:text/html,hi", "vbscript:x", ""] {
             assert!(classify_link(bad).is_none(), "{bad}");
         }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod image_path_tests {
+    use std::path::Path;
+
+    use super::image_candidates;
+
+    #[test]
+    fn image_cells_resolve_beside_the_data_and_never_to_other_computers() {
+        let (data, doc) = (Path::new("/work/data"), Path::new("/work/doc"));
+        for cell in [r"\\192.0.2.1\share\x.png", "file://192.0.2.1/s/x.png", "//192.0.2.1/s/x.png", "https://example.com/x.png"] {
+            assert!(image_candidates(cell, Some(data), Some(doc)).is_empty(), "{cell}");
+        }
+        let found = image_candidates("img/x.png", Some(data), Some(doc));
+        assert_eq!(found, [data.join("img").join("x.png"), doc.join("img").join("x.png")]);
+        assert!(image_candidates("img/x.png", None, None).is_empty(), "not beside the working directory");
     }
 }
