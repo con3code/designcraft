@@ -1671,19 +1671,15 @@ fn field_focused_id(ctx: &egui::Context) -> egui::Id {
 pub fn begin_frame(ctx: &egui::Context) {
     let (id, focused) = (field_focused_id(ctx), ctx.text_edit_focused());
     ctx.data_mut(|d| d.insert_temp(id, focused));
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let now = ctx.input(|i| i.modifiers);
-        // The modifiers last frame ended with are the ones this frame's events began with.
-        ctx.data_mut(|d| {
-            let (_, end) = d.get_temp::<(egui::Modifiers, egui::Modifiers)>(modifiers_id()).unwrap_or((now, now));
-            d.insert_temp(modifiers_id(), (end, now));
-        });
-    }
+    let now = ctx.input(|i| i.modifiers);
+    // The modifiers last frame ended with are the ones this frame's events began with.
+    ctx.data_mut(|d| {
+        let (_, end) = d.get_temp::<(egui::Modifiers, egui::Modifiers)>(modifiers_id()).unwrap_or((now, now));
+        d.insert_temp(modifiers_id(), (end, now));
+    });
 }
 
 /// (held when this frame's events began, held after them).
-#[cfg(not(target_arch = "wasm32"))]
 fn modifiers_id() -> egui::Id {
     egui::Id::new("canvas-frame-modifiers")
 }
@@ -2649,28 +2645,26 @@ fn handle_input(app: &mut DesignApp, ui: &mut egui::Ui, resp: &egui::Response, r
     // text must not delete the character before it).
     let composing_at_start = app.session.tool_composing();
     let evs = ui.input(|i| i.events.clone());
-    // Native only: egui-winit sends a ⌘+V chord as a paste without its key press, so the modifiers
-    // held at the paste tell Paste in Place from Paste. The web also gets the key press, and the
-    // shortcut table has already run the command. A chord's modifiers may be released in the same
-    // frame, hence the modifiers held at each event.
-    #[cfg(not(target_arch = "wasm32"))]
+    // The modifiers held at each event: they may be released later in the same frame. Shift+Space
+    // needs them, and so does Paste in Place natively, where egui-winit sends a ⌘+V chord as a
+    // paste without its key press (the web also gets the key press, and the shortcut table has
+    // already run the command).
     let mut held =
         ui.data(|d| d.get_temp::<(egui::Modifiers, egui::Modifiers)>(modifiers_id())).map_or_else(|| ui.input(|i| i.modifiers), |(start, _)| start);
     for e in evs {
+        if let egui::Event::ModifiersChanged(m) = &e {
+            held = *m;
+        }
         #[cfg(not(target_arch = "wasm32"))]
-        let chord = {
-            if let egui::Event::ModifiersChanged(m) = &e {
-                held = *m;
-            }
-            if matches!(e, egui::Event::Paste(_)) { crate::menus::paste_chord_command(app, held) } else { None }
-        };
+        let chord = if matches!(e, egui::Event::Paste(_)) { crate::menus::paste_chord_command(app, held) } else { None };
         let composing = composing_at_start || app.session.tool_composing();
         match e {
             egui::Event::Ime(ime) if wants_text => ime_event(app, ime, vi),
             // Keys the IME passes through come as text only while nothing is marked.
             egui::Event::Text(t) if wants_text && !composing => {
-                let shift = ui.input(|i| i.modifiers.shift);
-                let typed = typed_text(&t, app.ime_japanese_typing, shift, cfg!(target_os = "macos"));
+                // The caret may have moved to another story earlier this frame (a click).
+                ime_follow_caret(app);
+                let typed = typed_text(&t, app.ime_japanese_typing, held.shift, cfg!(target_os = "macos"));
                 // Letters straight from the keys: the input method is in its Roman mode.
                 if !t.trim().is_empty() {
                     app.ime_japanese_typing = false;
@@ -2832,6 +2826,16 @@ pub(crate) fn keep_marked_text(app: &mut DesignApp) {
     }
 }
 
+/// In another story (or document) the input mode may have changed unseen: Japanese typing starts
+/// over when the caret gets there.
+fn ime_follow_caret(app: &mut DesignApp) {
+    let here = app.session.active_index().zip(app.session.active().and_then(|st| st.selection.text).map(|t| t.story));
+    if here != app.ime_caret_story {
+        app.ime_japanese_typing = false;
+        app.ime_caret_story = here;
+    }
+}
+
 /// While the text caret is in the canvas, let the system IME compose (egui-winit allows it only in
 /// frames that set `ime`; the web build focuses its hidden text input then) and keep the candidate
 /// window at the caret, through zoom, scrolling, view rotation and vertical text.
@@ -2849,12 +2853,7 @@ fn ime_output(app: &mut DesignApp, ctx: &egui::Context, xf: &Xf) {
         app.ime_caret_story = None;
         return;
     };
-    // In another story (or document) the input mode may have changed unseen: start plain.
-    let here = app.session.active_index().zip(app.session.active().and_then(|st| st.selection.text).map(|t| t.story));
-    if here != app.ime_caret_story {
-        app.ime_japanese_typing = false;
-        app.ime_caret_story = here;
-    }
+    ime_follow_caret(app);
     let r = Rect::from_two_pos(xf.to_screen(a), xf.to_screen(b)).expand(1.0);
     // The composition ended outside the IME (a click, a command): the IME drops what it has marked.
     let interrupt = app.ime_marked.is_some() && !app.session.tool_composing();
@@ -5655,6 +5654,20 @@ mod tests {
         assert_eq!(story_text(&mut app, &sid), format!("日本語{space}ab é "));
     }
 
+    /// Shift+Space stays plain even when Shift comes up later in the same frame: the Shift held
+    /// at the space counts, not the one at the frame's end.
+    #[test]
+    fn shift_space_stays_plain_when_shift_is_released_in_the_same_frame() {
+        let mut app = DesignApp::new(designcraft_engine::Session::new(), crate::Services::default());
+        let ctx = egui::Context::default();
+        let sid = typing_app(&mut app, &ctx, "");
+        ime_frame(&mut app, &ctx, vec![preedit("にほんご", 4), egui::Event::Ime(egui::ImeEvent::Commit("日本語".into()))]);
+        let shift = egui::Event::ModifiersChanged(egui::Modifiers::SHIFT);
+        let up = egui::Event::ModifiersChanged(egui::Modifiers::NONE);
+        ime_frame(&mut app, &ctx, vec![shift, egui::Event::Text(" ".into()), up]);
+        assert_eq!(story_text(&mut app, &sid), "日本語 ");
+    }
+
     /// The caret moving to another story, or leaving the text, ends Japanese typing: the input
     /// mode may have changed without an event the app sees (the Eisu key, say).
     #[test]
@@ -5674,6 +5687,15 @@ mod tests {
         ime_frame(&mut app, &ctx, vec![egui::Event::Text(" ".into())]);
         assert_eq!(story_text(&mut app, &second), " ");
         assert_eq!(story_text(&mut app, &first), "日本語");
+        // Japanese typed in the first story, then the caret moves and a space comes in the same
+        // frame: still the new story's plain space.
+        app.session.execute("text.select", &json!({"story": first, "anchor": 0, "focus": 0})).unwrap();
+        ime_frame(&mut app, &ctx, vec![]);
+        commit(&mut app);
+        app.session.execute("text.select", &json!({"story": second, "anchor": 1, "focus": 1})).unwrap();
+        ime_frame(&mut app, &ctx, vec![egui::Event::Text(" ".into())]);
+        assert_eq!(story_text(&mut app, &second), "  ");
+        assert_eq!(story_text(&mut app, &first), "日本語日本語");
         commit(&mut app);
         app.select_tool("rectangleFrame");
         ime_frame(&mut app, &ctx, vec![]);
