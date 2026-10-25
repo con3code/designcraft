@@ -75,7 +75,11 @@ fn svg_options() -> &'static usvg::Options<'static> {
         db.set_sans_serif_family("Source Sans 3");
         db.set_monospace_family("JetBrains Mono");
         let font_resolver = usvg::FontResolver { select_font: select_font(), select_fallback: select_fallback() };
-        usvg::Options { fontdb: Arc::new(db), font_family: "Source Sans 3".into(), font_resolver, ..Default::default() }
+        // Images inside an SVG come only from `data:` URLs: an `href` naming a file is not read
+        // (it is left out, as usvg leaves out an image it can't load).
+        let image_href_resolver =
+            usvg::ImageHrefResolver { resolve_data: usvg::ImageHrefResolver::default_data_resolver(), resolve_string: Box::new(|_, _| None) };
+        usvg::Options { fontdb: Arc::new(db), font_family: "Source Sans 3".into(), font_resolver, image_href_resolver, ..Default::default() }
     })
 }
 
@@ -114,7 +118,7 @@ fn select_font() -> usvg::FontSelectionFn<'static> {
                         return Some(id);
                     }
                 }
-                // A family (or generic family) that matches: usvg's own selection.
+                // A family (or generic family) that matches: the query below.
                 _ => break,
             }
         }
@@ -513,6 +517,39 @@ mod tests {
         assert!(!is_svg(b"\x89PNG"));
     }
 
+    #[test]
+    fn svg_images_come_only_from_data_urls() {
+        let dir = std::env::temp_dir().join(format!("dc-svg-href-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("red.png");
+        image::RgbaImage::from_pixel(4, 4, image::Rgba([255, 0, 0, 255])).save(&file).unwrap();
+        let blue = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10'%3E%3Crect width='10' height='10' fill='blue'/%3E%3C/svg%3E";
+        let svg = format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="30" height="10">
+<image x="0" y="0" width="10" height="10" href="{}"/>
+<image x="10" y="0" width="10" height="10" href="{blue}"/>
+<image x="20" y="0" width="10" height="10" href="/etc/hostname"/>
+</svg>"#,
+            file.display()
+        );
+        // The image nodes usvg kept: only the data URL's (PDF export embeds every one).
+        fn images(g: &usvg::Group) -> usize {
+            g.children()
+                .iter()
+                .map(|n| match n {
+                    usvg::Node::Group(g) => images(g),
+                    usvg::Node::Image(_) => 1,
+                    _ => 0,
+                })
+                .sum()
+        }
+        assert_eq!(images(svg_tree(svg.as_bytes()).unwrap().root()), 1, "files the SVG names are not read");
+        let (px, w, _) = render_svg(svg.as_bytes(), 30).unwrap();
+        let at = |x: usize, y: usize| px[(y * w as usize + x) * 4..][..4].to_vec();
+        assert_eq!(at(15, 5), [0, 0, 255, 255], "a data URL is drawn");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// The family of the font that sets each text glyph of `svg`, and the glyph's id.
     fn glyph_families(svg: &str) -> Vec<(String, u16)> {
         fn walk(g: &usvg::Group, tree: &usvg::Tree, out: &mut Vec<(String, u16)>) {
@@ -701,8 +738,8 @@ mod tests {
     impl<const BITS: u16> tiff::encoder::colortype::ColorType for Palette<BITS> {
         type Inner = u8;
         const TIFF_VALUE: tiff::tags::PhotometricInterpretation = tiff::tags::PhotometricInterpretation::RGBPalette;
-        const BITS_PER_SAMPLE: &'static [u16] = &[BITS];
-        const SAMPLE_FORMAT: &'static [tiff::tags::SampleFormat] = &[tiff::tags::SampleFormat::Uint];
+        const BITS_PER_SAMPLE: &[u16] = &[BITS];
+        const SAMPLE_FORMAT: &[tiff::tags::SampleFormat] = &[tiff::tags::SampleFormat::Uint];
         fn horizontal_predict(row: &[u8], result: &mut Vec<u8>) {
             result.extend_from_slice(row);
         }
