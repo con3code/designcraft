@@ -2140,7 +2140,11 @@ fn preferences(app: &crate::DesignApp, ui: &mut egui::Ui, d: &mut Dialog, max_he
                     egui::ComboBox::from_id_salt("pref_language").width(180.0).height(400.0).selected_text(crate::rtl::widget(ui, current)).show_ui(
                         ui,
                         |ui| {
-                            for (code, name) in crate::i18n::picker_languages() {
+                            let ctx = ui.ctx().clone();
+                            let listed = crate::i18n::picker_languages()
+                                .into_iter()
+                                .filter(|(code, name)| crate::theme::language_listed(&ctx, code, name, &app.ui.language));
+                            for (code, name) in listed {
                                 if ui.selectable_label(code == app.ui.language, crate::rtl::widget(ui, name)).clicked() {
                                     // Applied by `show` right after this frame, which has `&mut DesignApp`.
                                     d.fields.insert("applyLanguage".into(), json!(code));
@@ -5931,7 +5935,7 @@ fn basic_character_formats(app: &mut DesignApp, ui: &mut egui::Ui, d: &mut Dialo
             v if v["kind"] == "points" => v["value"].as_f64(),
             _ => None,
         };
-        let field = crate::widgets::NumField::number("pslead", lv, " pt", 2).width(80.0).range(0.0, 5000.0);
+        let field = crate::widgets::NumField::points("pslead", lv, 2).width(80.0).range(0.0, 5000.0);
         let edit = if cf.sparse { field.show_or_clear(ui) } else { field.show(ui).map(Some) };
         if let Some(n) = edit {
             cf.set(d, "leading", n.map_or(Value::Null, |n| json!({"kind": "points", "value": n})));
