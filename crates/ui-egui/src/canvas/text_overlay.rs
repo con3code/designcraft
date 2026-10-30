@@ -1,5 +1,7 @@
 use super::frames::{item_canvas_xf, layer_color, path_screen};
-use super::*;
+use super::{Affine, CanvasLayout, Color32, DesignApp, Document, Point, Pos2, Rect, Stroke, Xf, compose, pos2};
+use designcraft_doc::Item;
+use designcraft_geom::Rect as DRect;
 
 pub(super) fn draw_text_selection(
     app: &DesignApp,
@@ -267,8 +269,12 @@ fn draw_inverse_highlight(
 
 /// Frame grids: their cells (or the N/Z view) and character counts, in the frame's layer colour
 /// (screen only).
-pub(super) fn draw_frame_grids(app: &DesignApp, painter: &egui::Painter, xf: &Xf, doc: &Document, layout: &CanvasLayout) {
+pub(super) fn draw_frame_grids(app: &DesignApp, painter: &egui::Painter, xf: &Xf, doc: &Document, layout: &CanvasLayout, preview: bool) {
     const MAX_CELLS: usize = 20_000;
+    // View › Show Frame Grids, and never in Preview.
+    if !app.ui.frame_grids || preview {
+        return;
+    }
     for slot in &layout.slots {
         let Some(sp) = doc.spread(slot.spread) else { continue };
         let mut frames: Vec<&Item> = Vec::new();

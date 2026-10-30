@@ -1,6 +1,10 @@
 use super::object::swatch_menu;
 use super::typography::{para_field_min, show_typography_panel};
-use super::*;
+use super::{
+    Align, DesignApp, FIELD_H, NumField, Rect, Sense, Stroke, StrokeKind, Tokens, Ui, Value, block, full_width, icon_toggle, icons, json, link_label,
+    more_options, outline_button, place, pos2, section, set_temp_bool, show_panel, sub, temp_bool, text_attrs, units, vec2, widgets,
+};
+use crate::widgets::divider;
 
 // ---------------------------------------------------------------- Text
 
@@ -179,7 +183,7 @@ pub(super) fn character_section(app: &mut DesignApp, ui: &mut Ui) {
         egui::FontId::proportional(11.5),
         t.text,
     );
-    if let Some(f) = crate::panels::font_popup(app, &resp, &menu, &fam) {
+    if let Some(f) = crate::panels::font_popup(app, ui, &resp, &menu, &fam) {
         crate::panels::apply_font(app, &f);
     }
     ui.add_space(1.0);
@@ -599,7 +603,7 @@ pub(super) fn grid_sections(app: &mut DesignApp, ui: &mut Ui, info: &Value) {
         egui::FontId::proportional(11.5),
         t.text,
     );
-    if let Some(pick) = super::super::font_popup(app, &resp, &menu, &fam) {
+    if let Some(pick) = super::super::font_popup(app, ui, &resp, &menu, &fam) {
         // The style picked in the menu, else the family's Regular (or its first style).
         let style = pick.style.clone().unwrap_or_else(|| {
             let styles = fonts.styles(&pick.family);

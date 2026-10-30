@@ -2,8 +2,8 @@ use super::bar::menu_button;
 use super::invoke::activate;
 use super::state::{checked, menu_enabled, shortcut_label};
 use super::tables::{MENUS, WORKSPACES};
-use super::ui_commands::shown;
-use super::*;
+use super::ui_commands::{shown, sub_shown};
+use super::{DesignApp, Item, Value, cmd_item, json};
 
 pub(super) fn parse_entries(entries: &[&str]) -> Vec<Item> {
     let mut out = Vec::new();

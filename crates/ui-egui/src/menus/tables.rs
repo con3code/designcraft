@@ -536,6 +536,9 @@ pub const MENUS: &[(&str, &[&str])] = &[
             "ui:view.taggedFrames",
             "ui:view.tagMarkers",
             "<",
+            ">Story Editor",
+            "ui:view.storyEditorDepthRuler",
+            "<",
         ],
     ),
     (
