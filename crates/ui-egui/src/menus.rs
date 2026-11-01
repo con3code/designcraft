@@ -39,7 +39,8 @@ pub use tables::{CLASSIC_GROUPS, MENUS, TYPOGRAPHY_GROUPS, WORKSPACE_OPEN_PANELS
 #[cfg(test)]
 use tree::menu_items;
 pub use tree::{
-    AppMenuItem, MAC_APP_MENU, OPEN_RECENT, all_menu_items, menu_key, menu_tree, native_label, native_menu_tree, recent_items, recent_label,
+    AppMenuItem, MAC_APP_MENU, OPEN_RECENT, all_menu_items, has_shown_item, menu_key, menu_tree, native_label, native_menu_tree, recent_items,
+    recent_label,
 };
 pub use ui_commands::{CJK_ONLY, CJK_TOOLS, UI_COMMANDS, shown, sub_shown, tool_shown, ui_label};
 
