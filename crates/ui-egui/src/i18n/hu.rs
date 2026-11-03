@@ -1957,6 +1957,13 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ("Measure Tool", "Mérőeszköz"),
     ("Hand Tool", "Kéz eszköz"),
     ("Zoom Tool", "Nagyító eszköz"),
+    ("Frame Grid", "Keretrács"),
+    ("Frame Grid Options…", "Keretrács beállításai…"),
+    ("Frame Type", "Kerettípus"),
+    ("Apply Grid Format", "Rácsformátum alkalmazása"),
+    ("Show/Hide Frame Grids", "Keretrácsok megjelenítése/elrejtése"),
+    ("Horizontal Grid Tool", "Vízszintes rács eszköz"),
+    ("Vertical Grid Tool", "Függőleges rács eszköz"),
 ];
 
 pub(super) const CONTEXT: &[(&str, &str, &str)] =

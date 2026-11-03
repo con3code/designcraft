@@ -2945,6 +2945,13 @@ pub(super) const TABLE: &[(&str, &str)] = &[
         "Links and Images: {found} linked, {modified} changed, {missing} not found",
         "Länkar och bilder: {found} länkade, {modified} ändrade, {missing} hittades inte",
     ),
+    ("Frame Grid", "Ramrutnät"),
+    ("Frame Grid Options…", "Alternativ för ramrutnät…"),
+    ("Frame Type", "Ramtyp"),
+    ("Apply Grid Format", "Använd rutnätsformat"),
+    ("Show/Hide Frame Grids", "Visa/dölj ramrutnät"),
+    ("Horizontal Grid Tool", "Horisontellt rutnätsverktyg"),
+    ("Vertical Grid Tool", "Vertikalt rutnätsverktyg"),
 ];
 
 pub(super) const CONTEXT: &[(&str, &str, &str)] = &[

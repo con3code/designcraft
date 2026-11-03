@@ -48,6 +48,10 @@ fn hungarian_tool_buttons_translate_every_tool_and_keep_shortcuts() {
             h.run_steps(3);
             let label = crate::i18n::tr("hu", tool.label);
             assert_ne!(label, tool.label, "untranslated tool: {}", tool.id);
+            // CJK-only tools (the grid tools) are left out of the panel without Show CJK Features.
+            if !crate::menus::tool_shown(&h.state().app, tool.id) {
+                continue;
+            }
             let shortcut = tool.shortcut.map(crate::menus::shortcut_text);
             assert_eq!(crate::menus::tool_shortcut_label(&h.state().app, tool.id), shortcut, "default binding for {}", tool.id);
             let tip = shortcut.map_or_else(|| label.to_owned(), |shortcut| format!("{label} ({shortcut})"));
@@ -66,6 +70,9 @@ fn hungarian_tool_buttons_translate_every_tool_and_keep_shortcuts() {
             // Single tools have no flyout; the collector group is split into separate
             // buttons in two-column mode and is covered by the tooltip checks above.
             if group.len() < 2 || (double && designcraft_tools::SPLIT_IN_TWO_COLUMNS.contains(&group[0].id)) {
+                continue;
+            }
+            if !crate::menus::tool_shown(&h.state().app, group[0].id) {
                 continue;
             }
             let first = group[0];
