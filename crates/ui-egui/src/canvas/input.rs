@@ -1,6 +1,6 @@
 use super::column_guides::{COLUMN_DRAG, ColumnDrag, column_guide_drag};
 use super::guides::guide_drag;
-use super::ime::{finish_pending_ime_delete, ime_event, ime_follow_caret, typed_text};
+use super::ime::{finish_pending_ime_delete, ime_event, japanese_input_source, typed_text};
 use super::rulers::zero_point_drag;
 use super::scroll::{mods, navigation_space, pan, spring_zoom_input, spring_zoom_mode, wheel_alt};
 use super::view::zoom_at;
@@ -165,6 +165,18 @@ fn item_at(app: &DesignApp, p: Point, zoom: f64) -> Option<(designcraft_doc::Ite
     Some((id, sp))
 }
 
+/// The empty or graphic frame under a pointer over the canvas: a graphic dropped there fills it
+/// instead of becoming a new object. `None` when the pointer isn't over the canvas or over such a
+/// frame, and for a locked frame, which a drop never replaces.
+pub fn drop_frame(app: &DesignApp, screen: Option<Pos2>) -> Option<designcraft_doc::ItemId> {
+    let rect = app.canvas_rect?;
+    let pos = screen.filter(|p| rect.contains(*p))?;
+    let v = app.view()?;
+    let (id, _) = item_at(app, Xf::new(rect, v).to_canvas(pos), v.zoom)?;
+    let it = app.session.active()?.doc.item(id)?;
+    (!it.locked && matches!(it.content, designcraft_doc::Content::Unassigned | designcraft_doc::Content::Graphic(_))).then_some(id)
+}
+
 /// Wheel, pinch and Alt/Ctrl/Cmd + wheel over the canvas: zoom at the pointer, else scroll.
 fn wheel_navigate(app: &mut DesignApp, ui: &egui::Ui, resp: &egui::Response, xf: &Xf) {
     let alt = wheel_alt(ui);
@@ -282,14 +294,8 @@ fn note_release(ui: &egui::Ui, clicks_id: egui::Id, latest: Option<Pos2>, now: f
 
 /// Text typed with no composition: into the story the caret is in now.
 fn insert_typed(app: &mut DesignApp, t: &str, shift: bool) {
-    // The caret may have moved to another story earlier this frame (a click).
-    ime_follow_caret(app);
-    let typed = typed_text(t, app.ime_japanese_typing, shift, cfg!(target_os = "macos"));
-    // Letters straight from the keys: the input method is in its Roman mode.
-    if !t.trim().is_empty() {
-        app.ime_japanese_typing = false;
-    }
-    let _ = app.run("text.insert", json!({"text": typed}));
+    let japanese = app.input_source.as_deref().is_some_and(japanese_input_source);
+    let _ = app.run("text.insert", json!({"text": typed_text(t, japanese, shift)}));
 }
 
 /// Give an open menu priority, then handle wheel/zoom/pan, spring Zoom, guide drags and primary pointer routing.

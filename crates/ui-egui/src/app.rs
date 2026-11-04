@@ -112,9 +112,7 @@ impl DesignApp {
             in_control: false,
             object_clip_text: None,
             ime_marked: None,
-            ime_japanese_typing: false,
-            ime_kana_seen: false,
-            ime_caret_story: None,
+            input_source: None,
             ime_discard: false,
             canvas_ime: false,
             ime_tracker: egui::ime_context::ImeContextTracker::new(),
@@ -213,11 +211,12 @@ impl DesignApp {
                 // Sample the generation once for the whole batch: placing the first valid file
                 // must not suppress later files that belong to the same captured batch.
                 let current = self.input_generation();
+                let mut frame_free = true;
                 for drop in std::mem::take(&mut self.pending_drops) {
                     if drop.generation != current {
                         continue;
                     }
-                    let _ = self.open_dropped_at(&drop.path, drop.pointer);
+                    let _ = self.place_dropped(&drop.path, drop.pointer, &mut frame_free);
                 }
             }
             menus::shortcuts(self, &ctx);
